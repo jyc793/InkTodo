@@ -7,9 +7,17 @@
 - 最低 Android：8.0（API 26）
 - 主要适配：Android 14+、Redmi K70 至尊版 HyperOS
 
-## 获取与构建
+## 下载与构建
 
-本公开仓库仅发布完整源码和文档，暂不提供预编译 APK 或 GitHub Release。应用不依赖账号、云服务或电脑连接；自行构建后即可离线使用。
+正式安装包可从 [GitHub Releases](https://github.com/jyc793/InkTodo/releases) 下载：
+
+- 版本：`v0.1.0`
+- 文件：`InkTodo-v0.1.0.apk`
+- 大小：3,484,251 bytes（约 3.32 MiB）
+- SHA-256：`BE46DAD10D4F442976BAF2046E4E03385ABD41F867466A496ABCB91C981860D6`
+- 签名：APK Signature Scheme v2 + v3
+
+正式 APK 使用 InkTodo 专用 Release 证书签名，安装后不依赖电脑。首次从旧的 Debug 签名版切换到正式版时签名不同，Android 不允许直接覆盖；请先自行处理本地数据，再卸载旧版。
 
 在 Android Studio 打开仓库根目录，使用 JDK 17 执行 Debug 构建：
 
@@ -17,13 +25,29 @@
 .\gradlew.bat assembleDebug
 ```
 
-输出 APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。若准备长期向同一设备升级，请使用自己妥善备份的 Release keystore；更换签名证书通常需要先卸载旧包，可能清除本地数据。
+输出 APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。
+
+正式签名构建通过环境变量指定项目外的属性文件：
+
+```properties
+storeFile=D:/secure/inktodo-release.jks
+storePassword=请填写密钥库密码
+keyAlias=inktodo-release
+keyPassword=请填写密钥密码
+```
+
+```powershell
+$env:INKTODO_SIGNING_PROPERTIES = "D:\secure\inktodo-signing.properties"
+.\gradlew.bat assembleRelease
+```
+
+`*.jks`、`*.keystore`、`key.properties`、APK/AAB 和本地构建目录均已被 Git 忽略。请妥善保管签名证书与密码；丢失后将无法为 GitHub 侧载用户提供可覆盖安装的更新。
 
 ## 安装方法
 
 ### 手机直接安装
 
-1. 将自行构建的 APK 复制到手机。
+1. 从 Releases 下载正式 APK，或将自行构建的 APK 复制到手机。
 2. 在文件管理器中打开 APK。
 3. 按 HyperOS 提示允许该文件来源安装应用。
 4. 安装后打开“墨待”，按实际使用的提醒功能逐项配置权限，不会在首次启动连续弹出全部权限。
@@ -31,7 +55,7 @@
 ### ADB 安装
 
 ```powershell
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb install -r InkTodo-v0.1.0.apk
 ```
 
 `-r` 会在签名一致时保留已有 Room 数据、DataStore 偏好和 Widget 配置。
