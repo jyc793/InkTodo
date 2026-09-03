@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="widget_paper">#18201E</color>
+    <color name="widget_ink">#EEF1EC</color>
+    <color name="widget_mist">#AAB6B1</color>
+    <color name="widget_indigo">#9CBEC3</color>
+    <color name="widget_jade">#80B5A4</color>
+    <color name="widget_jade_wash">#24332F</color>
+    <color name="widget_edge">#6680B5A4</color>
+    <color name="widget_cinnabar">#E27A6E</color>
+</resources>

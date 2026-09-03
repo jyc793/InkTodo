@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">墨待</string>
+    <string name="widget_name">墨待 · 今日待办</string>
+    <string name="widget_description">以水墨琉璃风格显示今天未完成的待办</string>
+    <string name="widget_today_title">今日待办</string>
+    <string name="widget_empty">今日事毕，心有余白</string>
+</resources>
