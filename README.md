@@ -2,20 +2,20 @@
 
 墨待是一个面向 Android 14+ / 小米 HyperOS 的原生个人待办 App。产品保持四个核心入口：待办、日历、番茄钟、已完成；数据、偏好、计时与提醒全部在本地运行，不依赖账号、云服务或电脑连接。
 
-- 当前源码候选版：`0.6.7-rc1`（versionCode 15）；GitHub 已发布版仍为 `v0.1.0`
+- 当前源码与 GitHub 候选版：`0.6.7-rc1`（versionCode 15）
 - 包名：`com.inktodo.app`
 - 最低 Android：8.0（API 26）
 - 主要适配：Android 14+、Redmi K70 至尊版 HyperOS，以及 600dp+ Android 平板横竖屏
-- 本地候选 APK：`app/build/outputs/apk/release/app-release.apk`（4,993,144 bytes；SHA-256 `E5B998BD48022ED80DF45E3B27511A76CACE109115E53B9E8D395BF9FFC77B85`）。使用既有 Release 证书的 APK Signature Scheme v2 + v3 签名；此候选版尚未上传 GitHub。
+- Release APK：`InkTodo-0.6.7-rc1.apk`（4,993,144 bytes；SHA-256 `E5B998BD48022ED80DF45E3B27511A76CACE109115E53B9E8D395BF9FFC77B85`）。使用既有 Release 证书的 APK Signature Scheme v2 + v3 签名。
 
 ## 下载与构建
 
 正式安装包可从 [GitHub Releases](https://github.com/jyc793/InkTodo/releases) 下载：
 
-- 版本：`v0.1.0`
-- 文件：`InkTodo-v0.1.0.apk`
-- 大小：3,484,251 bytes（约 3.32 MiB）
-- SHA-256：`BE46DAD10D4F442976BAF2046E4E03385ABD41F867466A496ABCB91C981860D6`
+- 版本：`v0.6.7-rc1`（预发布版）
+- 文件：`InkTodo-0.6.7-rc1.apk`
+- 大小：4,993,144 bytes（约 4.76 MiB）
+- SHA-256：`E5B998BD48022ED80DF45E3B27511A76CACE109115E53B9E8D395BF9FFC77B85`
 - 签名：APK Signature Scheme v2 + v3
 
 正式 APK 使用 InkTodo 专用 Release 证书签名，安装后不依赖电脑。首次从旧的 Debug 签名版切换到正式版时签名不同，Android 不允许直接覆盖；请先自行处理本地数据，再卸载旧版。
@@ -56,7 +56,7 @@ $env:INKTODO_SIGNING_PROPERTIES = "D:\secure\inktodo-signing.properties"
 ### ADB 安装
 
 ```powershell
-adb install -r InkTodo-v0.1.0.apk
+adb install -r InkTodo-0.6.7-rc1.apk
 ```
 
 `-r` 会在签名一致时保留已有 Room 数据、DataStore 偏好和 Widget 配置。
@@ -192,3 +192,4 @@ com.inktodo.app/
 - 使用用户自有 Release keystore 建立可长期归档的正式签名流程。
 - 对不同 HyperOS 大版本建立小规模实机兼容矩阵，记录通知渠道、全屏权限和时钟确认差异。
 - 继续以静态山水 + 低频云雾为主，只有番茄钟使用较明显水波；避免为视觉效果牺牲提醒可靠性和耗电。
+
