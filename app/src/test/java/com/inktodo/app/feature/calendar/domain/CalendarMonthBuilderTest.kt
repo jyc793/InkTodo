@@ -46,6 +46,28 @@ class CalendarMonthBuilderTest {
 
         assertEquals(setOf(selected, selected.plusDays(1)), result.taskDates)
         assertEquals(listOf(1L, 2L), result.selectedTasks.map(TodoTask::id))
+        assertEquals(2, result.daySummaries[selected]?.count)
+        assertEquals("任务1、任务2", result.daySummaries[selected]?.preview)
+    }
+
+    @Test
+    fun repeatedSeriesCountsOncePerDayEvenWhenOldOccurrenceRemains() {
+        val first = task(1, LocalDate.of(2026, 8, 24), "2026-08-24T09:00:00Z")
+            .copy(recurrence = com.inktodo.app.core.model.TaskRecurrence.DAILY,
+                recurrenceSeriesId = "daily")
+        val second = task(2, LocalDate.of(2026, 8, 25), "2026-08-25T09:00:00Z")
+            .copy(recurrence = com.inktodo.app.core.model.TaskRecurrence.DAILY,
+                recurrenceSeriesId = "daily")
+        val date = LocalDate.of(2026, 8, 25)
+        val result = CalendarMonthBuilder.project(
+            tasks = listOf(first, second),
+            month = YearMonth.of(2026, 8),
+            selectedDate = date,
+            today = date,
+            zoneId = ZoneOffset.UTC,
+        )
+        assertEquals(1, result.daySummaries[date]?.count)
+        assertEquals(listOf(2L), result.selectedTasks.map(TodoTask::id))
     }
 
     @Test

@@ -74,7 +74,7 @@ class AndroidReminderReliabilityChecker(
             AndroidTaskNotificationController.CHANNEL_FORMAL_REMINDER,
         ).meetsRequirements(
             requiredImportance = NotificationManager.IMPORTANCE_HIGH,
-            soundRequired = false,
+            soundRequired = true,
             vibrationRequired = true,
         ) && notificationManager.getNotificationChannel(
             AndroidTaskNotificationController.CHANNEL_RANGE_REMINDER,
@@ -96,7 +96,7 @@ class AndroidReminderReliabilityChecker(
             AndroidTaskNotificationController.CHANNEL_FORMAL_REMINDER,
             "正式强提醒",
             NotificationManager.IMPORTANCE_HIGH,
-            soundRequired = false,
+            soundRequired = true,
             vibrationRequired = true,
         ),
         channelCapability(

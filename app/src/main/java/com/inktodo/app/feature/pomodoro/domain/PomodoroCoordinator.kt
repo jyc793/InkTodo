@@ -20,8 +20,9 @@ class PomodoroCoordinator(
 ) {
     private val mutex = Mutex()
 
-    suspend fun start() = mutate { preferences ->
+    suspend fun start(ordinaryImmersive: Boolean = true) = mutate { preferences ->
         PomodoroSessionLogic.start(preferences.pomodoroSession, preferences, clock.millis())
+            .copy(ordinaryImmersive = ordinaryImmersive)
     }
 
     suspend fun pause() = mutate { preferences ->
@@ -34,6 +35,21 @@ class PomodoroCoordinator(
 
     suspend fun reset() = mutate { preferences ->
         PomodoroSessionLogic.reset(preferences.pomodoroSession)
+    }
+
+    suspend fun setOrdinaryImmersive(enabled: Boolean) = mutex.withLock {
+        val session = preferencesRepository.preferences.first().pomodoroSession
+        if (session.ordinaryImmersive != enabled) {
+            preferencesRepository.setPomodoroSession(session.copy(ordinaryImmersive = enabled))
+        }
+    }
+
+    suspend fun setFloatingVisible(enabled: Boolean) = mutex.withLock {
+        val session = preferencesRepository.preferences.first().pomodoroSession
+        val resolvedEnabled = enabled && session.runState != PomodoroRunState.IDLE
+        if (session.floatingVisible != resolvedEnabled) {
+            preferencesRepository.setPomodoroSession(session.copy(floatingVisible = resolvedEnabled))
+        }
     }
 
     suspend fun end() = mutex.withLock {

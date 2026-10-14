@@ -20,7 +20,7 @@ object PomodoroSessionLogic {
         PomodoroRunState.IDLE -> durationMillis(session.phase, preferences)
         PomodoroRunState.PAUSED -> session.pausedRemainingMillis
         PomodoroRunState.RUNNING -> (session.targetEndEpochMillis - nowEpochMillis).coerceAtLeast(0L)
-    }
+    }.coerceIn(0L, durationMillis(session.phase, preferences))
 
     fun start(
         session: PomodoroSessionPreferences,
@@ -58,6 +58,8 @@ object PomodoroSessionLogic {
             runState = PomodoroRunState.IDLE,
             targetEndEpochMillis = 0L,
             pausedRemainingMillis = 0L,
+            ordinaryImmersive = false,
+            floatingVisible = false,
         )
 
     fun finish(session: PomodoroSessionPreferences): PomodoroSessionPreferences =

@@ -8,6 +8,8 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import com.inktodo.app.core.notification.TaskNotificationController
+import com.inktodo.app.core.notification.AndroidTaskNotificationController
+import com.inktodo.app.core.reminder.FormalReminderOverlayService
 import java.time.Clock
 import java.time.Instant
 
@@ -29,6 +31,10 @@ interface ReminderScheduler {
     ): ReminderScheduleResult
 
     fun cancel(taskId: Long)
+    fun renewActiveRange(snapshot: ScheduledTaskSnapshot): ReminderScheduleResult =
+        schedule(snapshot, alertIfRangeAlreadyActive = false)
+    fun restore(snapshot: ScheduledTaskSnapshot): ReminderScheduleResult =
+        schedule(snapshot, alertIfRangeAlreadyActive = false)
     fun restoreAwaitingConfirmation(snapshot: ScheduledTaskSnapshot) = Unit
 }
 
@@ -42,8 +48,24 @@ class AndroidReminderScheduler(
     override fun schedule(
         snapshot: ScheduledTaskSnapshot,
         alertIfRangeAlreadyActive: Boolean,
+    ): ReminderScheduleResult = scheduleInternal(snapshot, alertIfRangeAlreadyActive, preserveNotifications = false)
+
+    override fun renewActiveRange(snapshot: ScheduledTaskSnapshot): ReminderScheduleResult =
+        scheduleInternal(snapshot, alertIfRangeAlreadyActive = false, preserveNotifications = true)
+
+    override fun restore(snapshot: ScheduledTaskSnapshot): ReminderScheduleResult =
+        scheduleInternal(snapshot, alertIfRangeAlreadyActive = false, preserveNotifications = true)
+
+    private fun scheduleInternal(
+        snapshot: ScheduledTaskSnapshot,
+        alertIfRangeAlreadyActive: Boolean,
+        preserveNotifications: Boolean,
     ): ReminderScheduleResult {
-        cancel(snapshot.taskId)
+        cancelAlarms(snapshot.taskId)
+        if (!preserveNotifications) {
+            FormalReminderOverlayService.dismiss(context, snapshot.taskId)
+            notifications.cancelAll(snapshot.taskId)
+        }
         notifications.createChannels()
         val plan = ReminderPlanner.plan(snapshot, Instant.now(clock))
         val exactAvailable = canScheduleExactAlarms()
@@ -53,11 +75,25 @@ class AndroidReminderScheduler(
         }
         val issues = buildSet {
             if (plan.alarms.isNotEmpty() && !exactAvailable) add(ReminderScheduleIssue.EXACT_ALARM_UNAVAILABLE)
-            if ((plan.alarms.isNotEmpty() || plan.startRangeImmediately) && !notifications.canPostNotifications()) {
+            val requiredChannels = if (snapshot.kind == ReminderSnapshotKind.AT_TIME) {
+                if (snapshot.useSystemAlarm) listOf(AndroidTaskNotificationController.CHANNEL_PRE_REMINDER)
+                else listOf(AndroidTaskNotificationController.CHANNEL_PRE_REMINDER,
+                    AndroidTaskNotificationController.CHANNEL_FORMAL_REMINDER)
+            } else {
+                listOf(AndroidTaskNotificationController.CHANNEL_RANGE_REMINDER,
+                    AndroidTaskNotificationController.CHANNEL_RANGE_PERSISTENT) +
+                    if (snapshot.repeatIntervalMinutes != null || snapshot.confirmAtRangeStart) {
+                        listOf(AndroidTaskNotificationController.CHANNEL_FORMAL_REMINDER)
+                    } else emptyList()
+            }
+            if ((plan.alarms.isNotEmpty() || plan.startRangeImmediately) &&
+                requiredChannels.any { !notifications.canPostChannel(it) }) {
                 add(ReminderScheduleIssue.NOTIFICATION_PERMISSION_UNAVAILABLE)
             }
             if (
-                plan.alarms.any { it.kind == ReminderAlarmKind.FORMAL_REMINDER } &&
+                (plan.alarms.any { it.kind == ReminderAlarmKind.FORMAL_REMINDER ||
+                    it.kind == ReminderAlarmKind.RANGE_INTERVAL } ||
+                    snapshot.confirmAtRangeStart) &&
                 !Settings.canDrawOverlays(context)
             ) {
                 add(ReminderScheduleIssue.OVERLAY_PERMISSION_UNAVAILABLE)
@@ -67,13 +103,18 @@ class AndroidReminderScheduler(
     }
 
     override fun cancel(taskId: Long) {
+        cancelAlarms(taskId)
+        FormalReminderOverlayService.dismiss(context, taskId)
+        notifications.cancelAll(taskId)
+    }
+
+    private fun cancelAlarms(taskId: Long) {
         ReminderAlarmKind.entries.forEach { kind ->
             ReminderAlarmPendingIntents.find(context, taskId, kind)?.let { operation ->
                 alarmManager.cancel(operation)
                 operation.cancel()
             }
         }
-        notifications.cancelAll(taskId)
     }
 
     override fun restoreAwaitingConfirmation(snapshot: ScheduledTaskSnapshot) {

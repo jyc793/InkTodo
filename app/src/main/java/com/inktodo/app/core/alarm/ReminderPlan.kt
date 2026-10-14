@@ -11,6 +11,8 @@ enum class ReminderAlarmKind(val code: Int) {
     RANGE_START(3),
     RANGE_END(4),
     RANGE_RENEW(5),
+    REPEAT_ADVANCE(6),
+    RANGE_INTERVAL(7),
 }
 
 enum class ReminderSnapshotKind {
@@ -26,6 +28,9 @@ data class ScheduledTaskSnapshot(
     val endAt: Instant? = null,
     val useSystemAlarm: Boolean = false,
     val note: String? = null,
+    val isRepeating: Boolean = false,
+    val repeatIntervalMinutes: Int? = null,
+    val confirmAtRangeStart: Boolean = false,
 )
 
 data class PlannedReminderAlarm(
@@ -56,6 +61,8 @@ object ReminderPlanner {
                 }
                 if (!snapshot.useSystemAlarm) {
                     add(PlannedReminderAlarm(ReminderAlarmKind.FORMAL_REMINDER, snapshot.startAt))
+                } else if (snapshot.isRepeating) {
+                    add(PlannedReminderAlarm(ReminderAlarmKind.REPEAT_ADVANCE, snapshot.startAt))
                 }
             },
         )
@@ -69,6 +76,7 @@ object ReminderPlanner {
                 alarms = buildList {
                     add(PlannedReminderAlarm(ReminderAlarmKind.RANGE_END, endAt))
                     renewalAfter(now, endAt)?.let(::add)
+                    intervalAfter(snapshot, now)?.let(::add)
                 },
                 startRangeImmediately = true,
             )
@@ -78,6 +86,7 @@ object ReminderPlanner {
                 add(PlannedReminderAlarm(ReminderAlarmKind.RANGE_START, snapshot.startAt))
                 add(PlannedReminderAlarm(ReminderAlarmKind.RANGE_END, endAt))
                 renewalAfter(snapshot.startAt, endAt)?.let(::add)
+                intervalAfter(snapshot, now)?.let(::add)
             },
         )
     }
@@ -87,7 +96,27 @@ object ReminderPlanner {
             .takeIf(endAt::isAfter)
             ?.let { PlannedReminderAlarm(ReminderAlarmKind.RANGE_RENEW, it) }
 
-    val RANGE_RENEWAL_INTERVAL: Duration = Duration.ofHours(48)
+    fun intervalAfter(snapshot: ScheduledTaskSnapshot, now: Instant): PlannedReminderAlarm? {
+        val intervalMinutes = snapshot.repeatIntervalMinutes ?: return null
+        val endAt = snapshot.endAt ?: return null
+        val intervalMillis = Duration.ofMinutes(intervalMinutes.toLong()).toMillis()
+        val elapsedMillis = Duration.between(snapshot.startAt, now).toMillis().coerceAtLeast(0)
+        val nextStep = elapsedMillis / intervalMillis + 1
+        val triggerAt = snapshot.startAt.plusMillis(nextStep * intervalMillis)
+        return triggerAt.takeIf { it.isAfter(now) && it.isBefore(endAt) }
+            ?.let { PlannedReminderAlarm(ReminderAlarmKind.RANGE_INTERVAL, it) }
+    }
+
+    fun isIntervalTick(snapshot: ScheduledTaskSnapshot, at: Instant): Boolean {
+        val minutes = snapshot.repeatIntervalMinutes ?: return false
+        val end = snapshot.endAt ?: return false
+        val elapsed = Duration.between(snapshot.startAt, at).toMinutes()
+        return at.isAfter(snapshot.startAt) && at.isBefore(end) &&
+            elapsed > 0 && elapsed % minutes == 0L &&
+            snapshot.startAt.plus(Duration.ofMinutes(elapsed)) == at
+    }
+
+    val RANGE_RENEWAL_INTERVAL: Duration = Duration.ofHours(6)
 }
 
 fun TodoTask.toScheduledSnapshot(): ScheduledTaskSnapshot? {
@@ -101,6 +130,7 @@ fun TodoTask.toScheduledSnapshot(): ScheduledTaskSnapshot? {
             startAt = configuredReminder.startAt,
             useSystemAlarm = configuredReminder.useSystemAlarm,
             note = note?.trim()?.takeIf(String::isNotEmpty),
+            isRepeating = recurrence.isRepeating,
         )
         is TaskReminder.TimeRange -> if (configuredReminder.isManuallyStopped) null else ScheduledTaskSnapshot(
             taskId = id,
@@ -109,6 +139,9 @@ fun TodoTask.toScheduledSnapshot(): ScheduledTaskSnapshot? {
             startAt = configuredReminder.startAt,
             endAt = configuredReminder.endAt,
             note = note?.trim()?.takeIf(String::isNotEmpty),
+            isRepeating = recurrence.isRepeating,
+            repeatIntervalMinutes = configuredReminder.repeatIntervalMinutes,
+            confirmAtRangeStart = specialDateId != null,
         )
     }
 }

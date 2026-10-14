@@ -48,6 +48,9 @@ class DeviceProtectedReminderSnapshotStore(context: Context) : ReminderSnapshotS
         .put(FIELD_START_AT, snapshot.startAt.toEpochMilli())
         .put(FIELD_END_AT, snapshot.endAt?.toEpochMilli() ?: JSONObject.NULL)
         .put(FIELD_SYSTEM_ALARM, snapshot.useSystemAlarm)
+        .put(FIELD_IS_REPEATING, snapshot.isRepeating)
+        .put(FIELD_REPEAT_INTERVAL_MINUTES, snapshot.repeatIntervalMinutes ?: JSONObject.NULL)
+        .put(FIELD_CONFIRM_AT_RANGE_START, snapshot.confirmAtRangeStart)
         .toString()
 
     private fun decode(raw: String): ScheduledTaskSnapshot? = runCatching {
@@ -61,6 +64,10 @@ class DeviceProtectedReminderSnapshotStore(context: Context) : ReminderSnapshotS
             endAt = json.optLong(FIELD_END_AT).takeIf { !json.isNull(FIELD_END_AT) }
                 ?.let(java.time.Instant::ofEpochMilli),
             useSystemAlarm = json.optBoolean(FIELD_SYSTEM_ALARM, false),
+            isRepeating = json.optBoolean(FIELD_IS_REPEATING, false),
+            repeatIntervalMinutes = json.optInt(FIELD_REPEAT_INTERVAL_MINUTES)
+                .takeIf { !json.isNull(FIELD_REPEAT_INTERVAL_MINUTES) && it > 0 },
+            confirmAtRangeStart = json.optBoolean(FIELD_CONFIRM_AT_RANGE_START, false),
         )
     }.getOrNull()
 
@@ -76,5 +83,8 @@ class DeviceProtectedReminderSnapshotStore(context: Context) : ReminderSnapshotS
         const val FIELD_START_AT = "startAt"
         const val FIELD_END_AT = "endAt"
         const val FIELD_SYSTEM_ALARM = "systemAlarm"
+        const val FIELD_IS_REPEATING = "isRepeating"
+        const val FIELD_REPEAT_INTERVAL_MINUTES = "repeatIntervalMinutes"
+        const val FIELD_CONFIRM_AT_RANGE_START = "confirmAtRangeStart"
     }
 }

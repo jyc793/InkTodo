@@ -14,4 +14,15 @@ interface TaskRepository {
     suspend fun delete(id: Long): Boolean
     suspend fun setCompleted(id: Long, completed: Boolean, changedAt: Instant): Boolean
     suspend fun getSchedulableTasks(now: Instant): List<TodoTask>
+    suspend fun findSeriesOccurrence(seriesId: String, date: LocalDate): TodoTask? = null
+    suspend fun getPendingSeriesTasks(seriesId: String): List<TodoTask> = emptyList()
+    suspend fun getPendingRecurringTasks(): List<TodoTask> = emptyList()
+    suspend fun getExpiredRecurringTasks(before: LocalDate): List<TodoTask> = emptyList()
+    suspend fun findSpecialOccurrence(
+        specialDateId: Long,
+        occurrenceDate: LocalDate,
+        taskDate: LocalDate,
+    ): TodoTask? = null
+    suspend fun getSpecialDateTasks(specialDateId: Long): List<TodoTask> = emptyList()
+    suspend fun getExpiredSpecialDateTasks(before: LocalDate): List<TodoTask> = emptyList()
 }

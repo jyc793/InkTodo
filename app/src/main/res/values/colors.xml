@@ -2,12 +2,12 @@
 <resources>
     <color name="ink_paper">#F3F0E8</color>
     <color name="ink_night">#111714</color>
-    <color name="widget_paper">#F5F2E9</color>
-    <color name="widget_ink">#202725</color>
-    <color name="widget_mist">#66706D</color>
-    <color name="widget_indigo">#355C65</color>
-    <color name="widget_jade">#3F786A</color>
-    <color name="widget_jade_wash">#DCE8E0</color>
-    <color name="widget_edge">#553F786A</color>
+    <color name="widget_paper">#EEF4F6</color>
+    <color name="widget_ink">#14262F</color>
+    <color name="widget_mist">#526A76</color>
+    <color name="widget_indigo">#315F73</color>
+    <color name="widget_jade">#3E7883</color>
+    <color name="widget_jade_wash">#C9DCE3</color>
+    <color name="widget_edge">#70578398</color>
     <color name="widget_cinnabar">#A33C32</color>
 </resources>

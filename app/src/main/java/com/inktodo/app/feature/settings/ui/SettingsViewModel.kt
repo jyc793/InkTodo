@@ -53,6 +53,10 @@ class SettingsViewModel(
         viewModelScope.launch { preferencesRepository.setTaskSortOrder(value) }
     }
 
+    fun setHighRefreshRateAnimations(value: Boolean) {
+        viewModelScope.launch { preferencesRepository.setHighRefreshRateAnimations(value) }
+    }
+
     companion object {
         fun factory(
             checker: ReminderReliabilityChecker,

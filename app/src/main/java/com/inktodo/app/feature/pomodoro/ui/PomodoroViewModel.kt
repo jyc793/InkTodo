@@ -33,6 +33,8 @@ data class PomodoroUiState(
     val breakMinutes: Int = UserPreferences.DEFAULT_BREAK_MINUTES,
     val remainingMillis: Long = UserPreferences.DEFAULT_FOCUS_MINUTES * 60_000L,
     val targetEndEpochMillis: Long = 0L,
+    val ordinaryImmersive: Boolean = false,
+    val floatingVisible: Boolean = false,
     val fullFocus: FullFocusPreferences = FullFocusPreferences(),
 ) {
     val durationMillis: Long
@@ -71,13 +73,16 @@ class PomodoroViewModel(
         visibleClock,
     ) { preferences, now ->
         val session = preferences.pomodoroSession
+        val effectiveNow = maxOf(now, clock.millis())
         PomodoroUiState(
             phase = session.phase,
             runState = session.runState,
             focusMinutes = preferences.focusMinutes,
             breakMinutes = preferences.breakMinutes,
-            remainingMillis = PomodoroSessionLogic.remainingMillis(session, preferences, now),
+            remainingMillis = PomodoroSessionLogic.remainingMillis(session, preferences, effectiveNow),
             targetEndEpochMillis = session.targetEndEpochMillis,
+            ordinaryImmersive = session.ordinaryImmersive,
+            floatingVisible = session.floatingVisible,
             fullFocus = preferences.fullFocus,
         )
     }.stateIn(
@@ -93,6 +98,8 @@ class PomodoroViewModel(
     fun resume() = launchAction(coordinator::resume)
     fun reset() = launchAction(coordinator::reset)
     fun end() = launchAction(coordinator::end)
+    fun enterOrdinaryImmersive() = launchAction { coordinator.setOrdinaryImmersive(true) }
+    fun exitOrdinaryImmersive() = launchAction { coordinator.setOrdinaryImmersive(false) }
 
     val hasDndPolicyAccess: Boolean
         get() = fullFocusController.hasDndPolicyAccess
@@ -113,7 +120,7 @@ class PomodoroViewModel(
                 if (enableDnd && !fullFocusController.hasDndPolicyAccess) {
                     return@runCatching FullFocusStartResult.DND_ACCESS_REQUIRED
                 }
-                coordinator.start()
+                coordinator.start(ordinaryImmersive = false)
                 val activation = fullFocusController.activate(pin, enableDnd)
                 if (activation != FullFocusStartResult.STARTED) coordinator.end()
                 activation

@@ -12,6 +12,7 @@ import com.inktodo.app.core.alarm.ReminderHealthState
 import com.inktodo.app.core.alarm.ReminderHealthStore
 import com.inktodo.app.core.model.TaskReminder
 import com.inktodo.app.core.model.TodoTask
+import com.inktodo.app.core.model.TaskRecurrence
 import com.inktodo.app.core.widget.WidgetUpdater
 import java.time.Instant
 import java.time.LocalDate
@@ -176,6 +177,55 @@ class TaskCommandServiceTest {
         assertEquals(null, fixture.repository.findById(6))
     }
 
+    @Test
+    fun completingRecurringOccurrenceKeepsHistoryAndSchedulesNextOnlyOnce() = runBlocking {
+        val original = task(7, "每日复习", "2026-08-25T10:00:00Z")
+            .copy(recurrence = TaskRecurrence.DAILY, recurrenceSeriesId = "daily-7")
+        val fixture = fixture(original)
+
+        fixture.commands.setCompleted(7, true, now)
+        fixture.commands.advanceRecurrence(7, now)
+
+        val next = fixture.repository.findSeriesOccurrence("daily-7", LocalDate.of(2026, 8, 26))
+        assertNotNull(next)
+        assertTrue(checkNotNull(fixture.repository.findById(7)).isCompleted)
+        assertEquals(1, fixture.scheduler.scheduled.count { it.taskId == next!!.id })
+    }
+
+    @Test
+    fun expiredDailyOccurrencesIncludingCompletedAreRemovedAfterNextIsReady() = runBlocking {
+        val yesterday = task(40, "每日复习", "2026-08-25T10:00:00Z")
+            .copy(recurrence = TaskRecurrence.DAILY, recurrenceSeriesId = "daily-40")
+        val completed = yesterday.copy(id = 41, date = LocalDate.of(2026, 8, 24),
+            reminder = TaskReminder.AtTime(Instant.parse("2026-08-24T10:00:00Z")),
+            isCompleted = true, completedAt = now)
+        val fixture = fixture(yesterday, completed)
+
+        val removed = fixture.commands.pruneExpiredRecurringTasks(Instant.parse("2026-08-26T00:10:00Z"))
+
+        assertEquals(2, removed)
+        assertEquals(null, fixture.repository.findById(40))
+        assertEquals(null, fixture.repository.findById(41))
+        assertNotNull(fixture.repository.findSeriesOccurrence("daily-40", LocalDate.of(2026, 8, 26)))
+    }
+
+    @Test
+    fun completedOldOccurrenceReconstructsNextBeforeDeletionButKeepsOneOffHistory() = runBlocking {
+        val completed = task(42, "每日阅读", "2026-08-25T10:00:00Z")
+            .copy(recurrence = TaskRecurrence.DAILY, recurrenceSeriesId = "daily-42",
+                isCompleted = true, completedAt = now)
+        val oneOff = task(43, "单次完成", "2026-08-25T10:00:00Z")
+            .copy(isCompleted = true, completedAt = now)
+        val fixture = fixture(completed, oneOff)
+
+        val removed = fixture.commands.pruneExpiredRecurringTasks(Instant.parse("2026-08-26T00:10:00Z"))
+
+        assertEquals(1, removed)
+        assertEquals(null, fixture.repository.findById(42))
+        assertNotNull(fixture.repository.findById(43))
+        assertNotNull(fixture.repository.findSeriesOccurrence("daily-42", LocalDate.of(2026, 8, 26)))
+    }
+
     private fun fixture(vararg initial: TodoTask): Fixture {
         val repository = FakeRepository(initial.toList())
         val scheduler = FakeScheduler(now)
@@ -315,5 +365,13 @@ class TaskCommandServiceTest {
             return true
         }
         override suspend fun getSchedulableTasks(now: Instant) = tasks.value.values.filterNot(TodoTask::isCompleted)
+        override suspend fun findSeriesOccurrence(seriesId: String, date: LocalDate) =
+            tasks.value.values.firstOrNull { it.recurrenceSeriesId == seriesId && it.date == date }
+        override suspend fun getPendingSeriesTasks(seriesId: String) =
+            tasks.value.values.filter { it.recurrenceSeriesId == seriesId && !it.isCompleted }
+        override suspend fun getPendingRecurringTasks() =
+            tasks.value.values.filter { it.recurrence.isRepeating && !it.isCompleted }
+        override suspend fun getExpiredRecurringTasks(before: LocalDate) =
+            tasks.value.values.filter { it.recurrenceSeriesId != null && it.date.isBefore(before) }
     }
 }

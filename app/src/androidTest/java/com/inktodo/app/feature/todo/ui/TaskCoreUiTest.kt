@@ -136,6 +136,40 @@ class TaskCoreUiTest {
     }
 
     @Test
+    fun ordinaryPomodoroImmersionHidesBottomBarAndBackKeepsTimerRunning() {
+        waitForResource("nav_pomodoro").click()
+        scrollUntilAnyResource("pomodoro_start", "pomodoro_pause", "pomodoro_resume")
+        if (!device.hasObject(By.res("pomodoro_start"))) {
+            waitForResource("pomodoro_end").click()
+            waitForResource("pomodoro_start")
+        }
+        val compactTimer = waitForResource("pomodoro_timer").visibleBounds
+        waitForResource("pomodoro_start").click()
+
+        check(device.wait(Until.gone(By.res("nav_pomodoro")), TIMEOUT)) {
+            "普通开始后底栏未在首段转场结束时隐藏"
+        }
+        val immersiveTimer = waitForResource("pomodoro_timer").visibleBounds
+        check(immersiveTimer.width() >= compactTimer.width()) {
+            "沉浸态锦鲤环没有放大"
+        }
+        waitForResource("pomodoro_pause")
+
+        device.pressBack()
+        waitForResource("nav_pomodoro")
+        waitForResource("pomodoro_pause")
+        waitForText("专注时间")
+
+        waitForResource("pomodoro_timer").click()
+        check(device.wait(Until.gone(By.res("nav_pomodoro")), TIMEOUT)) {
+            "点击运行中的锦鲤环后没有重新进入沉浸态"
+        }
+        waitForResource("pomodoro_end").click()
+        waitForResource("nav_pomodoro")
+        waitForResource("pomodoro_start")
+    }
+
+    @Test
     fun activeRangeCanOnlyBeStoppedFromTaskDetailWithConfirmationAndPersistsState() {
         title = "持续真机-${System.currentTimeMillis()}"
         editedTitle = title

@@ -13,6 +13,8 @@ interface PreferencesRepository {
     suspend fun setThemeMode(value: ThemeMode)
     suspend fun setTaskSortOrder(value: TaskSortOrder)
     suspend fun setWidgetMaxTasks(value: Int)
+    suspend fun setHighRefreshRateAnimations(value: Boolean) = Unit
+    suspend fun setPomodoroFloatingPosition(xFraction: Float, yFraction: Float) = Unit
     suspend fun setPomodoroSession(value: PomodoroSessionPreferences)
     suspend fun setFullFocus(value: FullFocusPreferences) = Unit
 }

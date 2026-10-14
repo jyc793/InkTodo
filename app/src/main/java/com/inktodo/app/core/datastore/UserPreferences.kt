@@ -12,6 +12,9 @@ data class UserPreferences(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val taskSortOrder: TaskSortOrder = TaskSortOrder.TIME_ASCENDING,
     val widgetMaxTasks: Int = DEFAULT_WIDGET_MAX_TASKS,
+    val highRefreshRateAnimations: Boolean = false,
+    val pomodoroFloatingXFraction: Float = DEFAULT_FLOATING_X_FRACTION,
+    val pomodoroFloatingYFraction: Float = DEFAULT_FLOATING_Y_FRACTION,
     val pomodoroSession: PomodoroSessionPreferences = PomodoroSessionPreferences(),
     val fullFocus: FullFocusPreferences = FullFocusPreferences(),
 ) {
@@ -23,6 +26,8 @@ data class UserPreferences(
         const val MAX_TIMER_MINUTES = 24 * 60
         const val MIN_WIDGET_TASKS = 1
         const val MAX_WIDGET_TASKS = 20
+        const val DEFAULT_FLOATING_X_FRACTION = 1f
+        const val DEFAULT_FLOATING_Y_FRACTION = 0.28f
     }
 }
 
@@ -35,6 +40,8 @@ data class PomodoroSessionPreferences(
     val runState: PomodoroRunState = PomodoroRunState.IDLE,
     val targetEndEpochMillis: Long = 0L,
     val pausedRemainingMillis: Long = 0L,
+    val ordinaryImmersive: Boolean = false,
+    val floatingVisible: Boolean = false,
 )
 
 data class FullFocusPreferences(

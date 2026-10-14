@@ -11,8 +11,13 @@ import com.inktodo.app.feature.todo.domain.TaskCommandIssueNoticeGate
 import com.inktodo.app.feature.todo.domain.TaskRepository
 import com.inktodo.app.feature.todo.domain.userMessage
 import com.inktodo.app.feature.todo.domain.sortedByPreference
+import com.inktodo.app.feature.todo.domain.isVisibleInTodo
 import java.time.Clock
 import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.Duration
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -21,6 +26,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.MutableStateFlow
 
 data class TodoUiState(
     val tasks: List<TodoTask> = emptyList(),
@@ -34,11 +41,28 @@ class TodoViewModel(
     preferencesRepository: PreferencesRepository,
     private val clock: Clock = Clock.systemUTC(),
 ) : ViewModel() {
+    private val zoneId = ZoneId.systemDefault()
+    private val today = MutableStateFlow(LocalDate.now(clock.withZone(zoneId)))
+
+    init {
+        viewModelScope.launch {
+            while (isActive) {
+                val now = Instant.now(clock)
+                val nextDay = now.atZone(zoneId).toLocalDate().plusDays(1)
+                    .atStartOfDay(zoneId).toInstant()
+                delay(Duration.between(now, nextDay).toMillis().coerceAtLeast(1_000L))
+                today.value = LocalDate.now(clock.withZone(zoneId))
+            }
+        }
+    }
+
     val uiState: StateFlow<TodoUiState> = combine(
         repository.observePending(),
         preferencesRepository.preferences,
-    ) { tasks, preferences ->
-        TodoUiState(tasks = tasks.sortedByPreference(preferences.taskSortOrder), isLoading = false)
+        today,
+    ) { tasks, preferences, currentDate ->
+        TodoUiState(tasks = tasks.filter { it.isVisibleInTodo(currentDate, zoneId, Instant.now(clock)) }
+            .sortedByPreference(preferences.taskSortOrder), isLoading = false)
     }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TodoUiState())
 

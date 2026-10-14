@@ -10,6 +10,11 @@ import androidx.room.PrimaryKey
     indices = [
         Index(value = ["is_completed", "task_date_epoch_day"]),
         Index(value = ["updated_at_epoch_millis"]),
+        Index(value = ["recurrence_series_id", "task_date_epoch_day"], unique = true),
+        Index(
+            value = ["special_date_id", "special_occurrence_epoch_day", "task_date_epoch_day"],
+            unique = true,
+        ),
     ],
 )
 data class TaskEntity(
@@ -27,4 +32,16 @@ data class TaskEntity(
     val createdAtEpochMillis: Long,
     @ColumnInfo(name = "updated_at_epoch_millis")
     val updatedAtEpochMillis: Long,
+    @ColumnInfo(name = "repeat_mode", defaultValue = "'NONE'")
+    val repeatMode: String = "NONE",
+    @ColumnInfo(name = "repeat_weekdays_mask", defaultValue = "0")
+    val repeatWeekdaysMask: Int = 0,
+    @ColumnInfo(name = "recurrence_series_id")
+    val recurrenceSeriesId: String? = null,
+    @ColumnInfo(name = "special_date_id")
+    val specialDateId: Long? = null,
+    @ColumnInfo(name = "special_occurrence_epoch_day")
+    val specialOccurrenceEpochDay: Long? = null,
+    @ColumnInfo(name = "special_offset_days")
+    val specialOffsetDays: Int? = null,
 )

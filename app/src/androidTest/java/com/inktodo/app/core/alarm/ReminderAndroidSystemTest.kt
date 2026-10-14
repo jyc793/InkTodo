@@ -142,6 +142,7 @@ class ReminderAndroidSystemTest {
             serviceInfo.foregroundServiceType and ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE != 0,
         )
         assertNotNull(context.getDrawable(com.inktodo.app.R.drawable.ink_mountain_master_v1))
+        assertNotNull(context.getDrawable(com.inktodo.app.R.drawable.widget_mountain_cool_v1))
         assertNotNull(context.getDrawable(com.inktodo.app.R.drawable.ink_cloud_ribbon_v1))
     }
 
@@ -150,6 +151,17 @@ class ReminderAndroidSystemTest {
         val palette = formalOverlayPalette(darkTheme = true)
         val card = ColorUtils.compositeColors(palette.card, Color.rgb(3, 10, 8))
 
+        assertTrue(ColorUtils.calculateContrast(palette.ink, card) >= 7.0)
+        assertTrue(ColorUtils.calculateContrast(palette.inkSoft, card) >= 4.5)
+        assertTrue(ColorUtils.calculateContrast(Color.WHITE, palette.button) >= 4.5)
+    }
+
+    @Test
+    fun lightFormalOverlayPaletteIsCoolAndReadable() {
+        val palette = formalOverlayPalette(darkTheme = false)
+        val card = ColorUtils.compositeColors(palette.card, Color.rgb(216, 233, 239))
+
+        assertTrue(Color.blue(palette.card) > Color.red(palette.card))
         assertTrue(ColorUtils.calculateContrast(palette.ink, card) >= 7.0)
         assertTrue(ColorUtils.calculateContrast(palette.inkSoft, card) >= 4.5)
         assertTrue(ColorUtils.calculateContrast(Color.WHITE, palette.button) >= 4.5)

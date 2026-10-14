@@ -10,6 +10,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
@@ -33,18 +35,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.inktodo.app.core.datastore.PomodoroRunState
 import com.inktodo.app.core.focus.FullFocusStartResult
 import com.inktodo.app.core.ui.components.InkBackdrop
+import com.inktodo.app.core.ui.components.InkCompactButton
 import com.inktodo.app.core.ui.components.InkDestructiveButton
 import com.inktodo.app.core.ui.components.InkGlassCard
 import com.inktodo.app.core.ui.components.InkPrimaryButton
-import com.inktodo.app.core.ui.components.InkSecondaryButton
 import com.inktodo.app.core.ui.theme.InkScene
 import com.inktodo.app.core.ui.theme.InkTheme
 
@@ -81,16 +86,14 @@ internal fun FullFocusEntryAndOverlay(
         }
     }
 
-    InkSecondaryButton(
+    InkCompactButton(
         text = "开启完全专注",
         onClick = {
             entryMessage = null
             showPinSetup = true
         },
         enabled = state.runState == PomodoroRunState.IDLE,
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("full_focus_entry"),
+        modifier = Modifier.testTag("full_focus_entry"),
     )
 
     if (showPinSetup) {
@@ -232,13 +235,26 @@ private fun FullFocusOverlay(
     ) {
         BackHandler(onBack = requestExit)
         InkBackdrop(scene = InkScene.POMODORO) {
-            Box(modifier = Modifier.fillMaxSize()) {
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val timerDiameter = immersiveTimerDiameter(
+                    availableWidth = maxWidth.value,
+                    availableHeight = maxHeight.value,
+                    maxDiameter = 620f,
+                ).dp
+                val density = LocalDensity.current
+                val center = with(density) {
+                    Offset(maxWidth.toPx() / 2f, maxHeight.toPx() / 2f)
+                }
+                KoiRippleField(
+                    center = center,
+                    ringRadius = with(density) { timerDiameter.toPx() * 0.44f },
+                    runState = state.runState,
+                )
                 TimerMirror(
                     state = state,
                     modifier = Modifier
                         .align(Alignment.Center)
-                        .fillMaxWidth(0.84f)
-                        .aspectRatio(1f),
+                        .size(timerDiameter),
                     minimal = true,
                 )
 
@@ -249,21 +265,11 @@ private fun FullFocusOverlay(
                         .padding(InkTheme.spacing.md),
                     horizontalAlignment = Alignment.End,
                 ) {
-                    InkGlassCard(
-                        modifier = Modifier
-                            .width(InkTheme.spacing.touchTarget * 1.7f)
-                            .testTag("full_focus_controls_toggle"),
+                    InkCompactButton(
+                        text = if (controlsExpanded) "收起" else "控制",
                         onClick = { controlsExpanded = !controlsExpanded },
-                    ) {
-                        Text(
-                            if (controlsExpanded) "收起" else "控制",
-                            modifier = Modifier.padding(
-                                horizontal = InkTheme.spacing.md,
-                                vertical = InkTheme.spacing.sm,
-                            ),
-                            color = InkTheme.colors.ink,
-                        )
-                    }
+                        modifier = Modifier.testTag("full_focus_controls_toggle"),
+                    )
                     AnimatedVisibility(
                         visible = controlsExpanded,
                         enter = fadeIn() + expandVertically(expandFrom = Alignment.Top),
@@ -276,8 +282,8 @@ private fun FullFocusOverlay(
                             emphasized = true,
                         ) {
                             Column(
-                                modifier = Modifier.padding(InkTheme.spacing.md),
-                                verticalArrangement = Arrangement.spacedBy(InkTheme.spacing.sm),
+                                modifier = Modifier.padding(InkTheme.spacing.sm),
+                                verticalArrangement = Arrangement.spacedBy(InkTheme.spacing.xs),
                             ) {
                                 when (state.runState) {
                                     PomodoroRunState.RUNNING -> InkPrimaryButton(

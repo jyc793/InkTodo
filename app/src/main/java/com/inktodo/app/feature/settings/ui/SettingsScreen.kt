@@ -2,6 +2,7 @@ package com.inktodo.app.feature.settings.ui
 
 import android.Manifest
 import android.os.Build
+import androidx.compose.animation.AnimatedVisibility
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -29,6 +31,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -39,9 +43,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.inktodo.app.core.ui.theme.InkTheme
 import com.inktodo.app.core.ui.components.InkGlassCard
-import com.inktodo.app.core.ui.components.InkPrimaryButton
+import com.inktodo.app.core.ui.components.InkCompactButton
 import com.inktodo.app.core.ui.components.InkSceneHeader
-import com.inktodo.app.core.ui.components.InkSecondaryButton
 import com.inktodo.app.core.ui.components.InkSectionLabel
 import com.inktodo.app.core.ui.components.InkStatusSeal
 import com.inktodo.app.core.ui.theme.InkScene
@@ -84,14 +87,14 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(contentPadding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = InkTheme.spacing.lg, vertical = InkTheme.spacing.md),
-            verticalArrangement = Arrangement.spacedBy(InkTheme.spacing.md),
+                .padding(horizontal = InkTheme.spacing.screenHorizontal, vertical = InkTheme.spacing.sm),
+            verticalArrangement = Arrangement.spacedBy(InkTheme.spacing.sm),
         ) {
             InkSceneHeader(
                 title = "提醒可靠性",
                 scene = InkScene.SETTINGS,
                 subtitle = "先看总状态，只处理未开启项",
-                action = { InkSecondaryButton(text = "返回", onClick = onBack) },
+                action = { InkCompactButton(text = "返回", onClick = onBack) },
             )
 
             InkGlassCard(
@@ -100,7 +103,7 @@ fun SettingsScreen(
                     .testTag("reliability_summary"),
                 emphasized = true,
             ) {
-                Column(modifier = Modifier.padding(InkTheme.spacing.lg)) {
+                Column(modifier = Modifier.padding(InkTheme.spacing.sm)) {
                     Text(
                         state.reliability.summary,
                         color = if (state.reliability.disabledCount > 0) {
@@ -110,7 +113,7 @@ fun SettingsScreen(
                         },
                         style = MaterialTheme.typography.titleLarge,
                     )
-                    Spacer(Modifier.height(InkTheme.spacing.sm))
+                    Spacer(Modifier.height(InkTheme.spacing.xs))
                     Text(
                         "通知总开关开启后，四个必要渠道会自动建立；已显示“已开启”的项目无需逐个进入。Android 特殊权限仍需由你逐项确认，返回后本页会自动刷新。",
                         color = InkTheme.colors.inkSoft,
@@ -119,28 +122,28 @@ fun SettingsScreen(
                 }
             }
 
-            state.reliability.items.forEach { item ->
-                ReliabilityCard(
-                    item = item,
-                    onAction = {
-                        if (item.action == ReliabilityAction.REQUEST_NOTIFICATION_PERMISSION &&
-                            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-                        ) {
-                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        } else {
-                            val result = navigator.open(item.action, item.channelId)
-                            result.message?.let { message ->
-                                scope.launch { snackbar.showSnackbar(message) }
-                            }
+            ReliabilityGroup(
+                items = state.reliability.items,
+                onAction = { item ->
+                    if (item.action == ReliabilityAction.REQUEST_NOTIFICATION_PERMISSION &&
+                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                    ) {
+                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        val result = navigator.open(item.action, item.channelId)
+                        result.message?.let { message ->
+                            scope.launch { snackbar.showSnackbar(message) }
                         }
-                    },
-                )
-            }
+                    }
+                },
+            )
             HabitPreferences(
                 themeMode = state.preferences.themeMode,
                 taskSortOrder = state.preferences.taskSortOrder,
+                highRefreshRateAnimations = state.preferences.highRefreshRateAnimations,
                 onThemeModeSelected = viewModel::setThemeMode,
                 onTaskSortOrderSelected = viewModel::setTaskSortOrder,
+                onHighRefreshRateAnimationsChanged = viewModel::setHighRefreshRateAnimations,
             )
             Spacer(Modifier.height(InkTheme.spacing.md))
         }
@@ -151,8 +154,10 @@ fun SettingsScreen(
 private fun HabitPreferences(
     themeMode: ThemeMode,
     taskSortOrder: TaskSortOrder,
+    highRefreshRateAnimations: Boolean,
     onThemeModeSelected: (ThemeMode) -> Unit,
     onTaskSortOrderSelected: (TaskSortOrder) -> Unit,
+    onHighRefreshRateAnimationsChanged: (Boolean) -> Unit,
 ) {
     InkGlassCard(
         modifier = Modifier
@@ -160,8 +165,8 @@ private fun HabitPreferences(
             .testTag("habit_preferences"),
     ) {
         Column(
-            modifier = Modifier.padding(InkTheme.spacing.lg),
-            verticalArrangement = Arrangement.spacedBy(InkTheme.spacing.sm),
+            modifier = Modifier.padding(InkTheme.spacing.sm),
+            verticalArrangement = Arrangement.spacedBy(InkTheme.spacing.xs),
         ) {
             Text("使用习惯", color = InkTheme.colors.ink, style = MaterialTheme.typography.titleLarge)
             InkSectionLabel("主题")
@@ -200,49 +205,127 @@ private fun HabitPreferences(
                     )
                 }
             }
+            InkSectionLabel("动画刷新率")
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(InkTheme.spacing.sm)) {
+                item {
+                    FilterChip(
+                        modifier = Modifier.defaultMinSize(minHeight = InkTheme.spacing.touchTarget),
+                        selected = !highRefreshRateAnimations,
+                        onClick = { onHighRefreshRateAnimationsChanged(false) },
+                        label = { Text("标准（省电）") },
+                        colors = settingsChipColors(),
+                    )
+                }
+                item {
+                    FilterChip(
+                        modifier = Modifier
+                            .defaultMinSize(minHeight = InkTheme.spacing.touchTarget)
+                            .testTag("high_refresh_rate_animations"),
+                        selected = highRefreshRateAnimations,
+                        onClick = { onHighRefreshRateAnimationsChanged(true) },
+                        label = { Text("高刷新率") },
+                        colors = settingsChipColors(),
+                    )
+                }
+            }
+            Text(
+                text = "高刷新率会增加耗电；实际帧率由屏幕、系统省电状态和温度决定。",
+                color = InkTheme.colors.inkSoft,
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }
 
 @Composable
-private fun ReliabilityCard(item: ReliabilityItem, onAction: () -> Unit) {
+private fun ReliabilityGroup(
+    items: List<ReliabilityItem>,
+    onAction: (ReliabilityItem) -> Unit,
+) {
+    var expandedId by rememberSaveable { androidx.compose.runtime.mutableStateOf<String?>(null) }
     InkGlassCard(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
-            modifier = Modifier.padding(InkTheme.spacing.lg),
-            verticalArrangement = Arrangement.spacedBy(InkTheme.spacing.sm),
+            modifier = Modifier.padding(horizontal = InkTheme.spacing.sm, vertical = InkTheme.spacing.xs),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(item.title, color = InkTheme.colors.ink, style = MaterialTheme.typography.titleMedium)
-                InkStatusSeal(
-                    text = item.statusText(),
-                    scene = when (item.state) {
-                        ReliabilityState.ENABLED -> InkScene.SETTINGS
-                        ReliabilityState.DISABLED -> InkScene.REMINDER
-                        ReliabilityState.SYSTEM_LIMITED -> InkScene.CALENDAR
-                    },
-                )
-            }
-            Text(item.description, color = InkTheme.colors.inkSoft, style = MaterialTheme.typography.bodyMedium)
-            item.guidance?.let {
-                Text(it, color = InkTheme.colors.indigo, style = MaterialTheme.typography.bodySmall)
-            }
-            if (item.action != ReliabilityAction.NONE) {
-                InkPrimaryButton(
-                    text = if (item.state == ReliabilityState.SYSTEM_LIMITED) "去确认" else "去开启",
-                    onClick = onAction,
+            items.forEachIndexed { index, item ->
+                val groupName = item.reliabilityGroupName()
+                if (index > 0) {
+                    HorizontalDivider(color = InkTheme.colors.glassEdge.copy(alpha = 0.7f))
+                }
+                if (index == 0 || items[index - 1].reliabilityGroupName() != groupName) {
+                    InkSectionLabel(groupName)
+                }
+                Row(
                     modifier = Modifier
-                        .align(Alignment.End)
-                        .testTag("reliability_action_${item.id}"),
-                )
+                        .fillMaxWidth()
+                        .padding(top = InkTheme.spacing.xs),
+                    horizontalArrangement = Arrangement.spacedBy(InkTheme.spacing.xs),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        item.title,
+                        modifier = Modifier.weight(1f),
+                        color = InkTheme.colors.ink,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    InkStatusSeal(
+                        text = item.statusText(),
+                        scene = when (item.state) {
+                            ReliabilityState.ENABLED -> InkScene.SETTINGS
+                            ReliabilityState.DISABLED -> InkScene.REMINDER
+                            ReliabilityState.SYSTEM_LIMITED -> InkScene.CALENDAR
+                        },
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(InkTheme.spacing.xs),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        item.description,
+                        modifier = Modifier.weight(1f),
+                        color = InkTheme.colors.inkSoft,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                    if (item.guidance != null) {
+                        InkCompactButton(
+                            text = if (expandedId == item.id) "收起" else "说明",
+                            onClick = { expandedId = item.id.takeUnless { expandedId == it } },
+                        )
+                    }
+                    if (item.action != ReliabilityAction.NONE) {
+                        InkCompactButton(
+                            text = if (item.state == ReliabilityState.SYSTEM_LIMITED) "确认" else "开启",
+                            onClick = { onAction(item) },
+                            emphasized = item.state == ReliabilityState.DISABLED,
+                            modifier = Modifier.testTag("reliability_action_${item.id}"),
+                        )
+                    }
+                }
+                AnimatedVisibility(visible = expandedId == item.id) {
+                    item.guidance?.let {
+                        Text(
+                            it,
+                            modifier = Modifier.padding(bottom = InkTheme.spacing.xs),
+                            color = InkTheme.colors.indigo,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
             }
         }
     }
+}
+
+private fun ReliabilityItem.reliabilityGroupName(): String = when {
+    id == "system_clock" -> "系统闹钟"
+    id == "lock_screen" || id == "battery_unrestricted" || id.startsWith("hyperos_") -> "系统后台"
+    else -> "提醒能力"
 }
 
 private fun ReliabilityItem.statusText(): String = when (state) {

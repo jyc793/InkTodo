@@ -13,6 +13,11 @@ data class TodoTask(
     val completedAt: Instant? = null,
     val createdAt: Instant,
     val updatedAt: Instant,
+    val recurrence: TaskRecurrence = TaskRecurrence.NONE,
+    val recurrenceSeriesId: String? = null,
+    val specialDateId: Long? = null,
+    val specialOccurrenceDate: LocalDate? = null,
+    val specialOffsetDays: Int? = null,
 )
 
 sealed interface TaskReminder {
@@ -27,6 +32,7 @@ sealed interface TaskReminder {
         override val startAt: Instant,
         val endAt: Instant,
         val isManuallyStopped: Boolean = false,
+        val repeatIntervalMinutes: Int? = null,
     ) : TaskReminder
 }
 

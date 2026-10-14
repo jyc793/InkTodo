@@ -6,11 +6,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -27,6 +29,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.inktodo.app.core.ui.theme.InkScene
 import com.inktodo.app.core.ui.theme.InkTheme
 import com.inktodo.app.core.ui.theme.accent
@@ -45,7 +48,7 @@ fun InkSceneHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = spacing.sm, bottom = spacing.md),
+            .padding(top = spacing.xs, bottom = spacing.sm),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -55,7 +58,7 @@ fun InkSceneHeader(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Surface(
-                modifier = Modifier.size(spacing.touchTarget),
+                modifier = Modifier.size(spacing.touchTarget - spacing.sm),
                 shape = MaterialTheme.shapes.medium,
                 color = accent.copy(alpha = 0.12f),
                 border = BorderStroke(InkTheme.glass.edgeWidth, accent.copy(alpha = 0.56f)),
@@ -170,6 +173,65 @@ fun InkSecondaryButton(
             disabledContentColor = InkTheme.colors.mist,
         ),
     ) { Text(text, style = MaterialTheme.typography.labelLarge) }
+}
+
+/** A visually compact action with a full 48dp touch target. */
+@Composable
+fun InkCompactButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    emphasized: Boolean = false,
+    destructive: Boolean = false,
+) {
+    val colors = InkTheme.colors
+    val interaction = remember { MutableInteractionSource() }
+    Box(
+        modifier = modifier
+            .defaultMinSize(
+                minWidth = InkTheme.spacing.touchTarget,
+                minHeight = InkTheme.spacing.touchTarget,
+            )
+            .semantics { role = Role.Button }
+            .clickable(
+                enabled = enabled,
+                interactionSource = interaction,
+                indication = LocalIndication.current,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Surface(
+            modifier = Modifier.height(36.dp),
+            shape = MaterialTheme.shapes.small,
+            color = if (emphasized) colors.moss else colors.glass.copy(alpha = 0.34f),
+            border = BorderStroke(
+                InkTheme.glass.edgeWidth,
+                when {
+                    emphasized -> colors.moss
+                    destructive -> colors.cinnabar.copy(alpha = 0.62f)
+                    else -> colors.glassEdge
+                },
+            ),
+        ) {
+            Box(
+                modifier = Modifier.padding(horizontal = 11.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = text,
+                    color = when {
+                        emphasized -> colors.surfaceStrong
+                        destructive -> colors.cinnabar
+                        else -> colors.inkSoft
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
 }
 
 @Composable

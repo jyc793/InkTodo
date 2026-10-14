@@ -1,6 +1,8 @@
 package com.inktodo.app.feature.todo.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,19 +16,26 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
 import com.inktodo.app.core.model.TodoTask
-import com.inktodo.app.core.ui.components.InkDestructiveButton
+import com.inktodo.app.core.ui.components.InkCompactButton
 import com.inktodo.app.core.ui.components.InkGlassCard
 import com.inktodo.app.core.ui.components.InkSceneHeader
-import com.inktodo.app.core.ui.components.InkSecondaryButton
 import com.inktodo.app.core.ui.theme.InkScene
 import com.inktodo.app.core.ui.theme.InkTheme
 import com.inktodo.app.core.ui.theme.accent
@@ -41,6 +50,7 @@ internal fun TaskListContent(
     primaryActionLabel: String,
     onPrimaryAction: (Long) -> Unit,
     onOpenTask: (Long) -> Unit,
+    onEditTask: (Long) -> Unit,
     onDeleteTask: (TodoTask) -> Unit,
     modifier: Modifier = Modifier,
     headerAction: (@Composable () -> Unit)? = null,
@@ -49,7 +59,7 @@ internal fun TaskListContent(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = spacing.lg),
+            .padding(horizontal = spacing.screenHorizontal),
     ) {
         InkSceneHeader(
             title = title,
@@ -95,6 +105,7 @@ internal fun TaskListContent(
                         primaryActionLabel = primaryActionLabel,
                         onPrimaryAction = { onPrimaryAction(task.id) },
                         onOpen = { onOpenTask(task.id) },
+                        onEdit = { onEditTask(task.id) },
                         onDelete = { onDeleteTask(task) },
                     )
                 }
@@ -111,28 +122,39 @@ private fun TaskItem(
     primaryActionLabel: String,
     onPrimaryAction: () -> Unit,
     onOpen: () -> Unit,
+    onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val spacing = InkTheme.spacing
     val completed = scene == InkScene.COMPLETED
     val colors = InkTheme.colors
+    var menuExpanded by remember(task.id) { mutableStateOf(false) }
     InkGlassCard(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("task_item_${task.id}"),
         muted = scene == InkScene.COMPLETED,
-        onClick = onOpen,
     ) {
-        Column(modifier = Modifier.padding(horizontal = spacing.md, vertical = spacing.sm)) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier
+                    .weight(1f)
+                    .pointerInput(task.id) {
+                        detectTapGestures(
+                            onTap = { onOpen() },
+                            onDoubleTap = { onEdit() },
+                        )
+                    },
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
                     modifier = Modifier
-                        .padding(end = spacing.sm)
-                        .size(width = spacing.xs, height = spacing.xl)
+                        .size(width = 3.dp, height = 32.dp)
                         .background(
                             if (completed) colors.mist.copy(alpha = 0.48f) else scene.accent(colors),
                             MaterialTheme.shapes.small,
@@ -143,6 +165,8 @@ private fun TaskItem(
                         task.title,
                         color = if (completed) colors.inkSoft.copy(alpha = 0.78f) else colors.ink,
                         style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     )
                     Text(
                         "${task.dateLabel()} · ${task.reminderLabel()}",
@@ -154,26 +178,49 @@ private fun TaskItem(
                             it,
                             color = colors.mist.copy(alpha = if (completed) 0.62f else 1f),
                             style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 2,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                         )
                     }
                 }
-                InkSecondaryButton(
-                    text = primaryActionLabel,
-                    modifier = Modifier.semantics {
-                        contentDescription = "$primaryActionLabel 任务：${task.title}"
-                    },
-                    onClick = onPrimaryAction,
-                )
             }
-            InkDestructiveButton(
-                text = "删除",
-                modifier = Modifier
-                    .align(Alignment.End)
-                    .testTag("delete_task_${task.id}")
-                    .semantics { contentDescription = "删除任务：${task.title}" },
-                onClick = onDelete,
+            InkCompactButton(
+                text = primaryActionLabel,
+                modifier = Modifier.semantics {
+                    contentDescription = "$primaryActionLabel 任务：${task.title}"
+                },
+                onClick = onPrimaryAction,
             )
+            Box(
+                modifier = Modifier
+                    .size(spacing.touchTarget)
+                    .semantics { contentDescription = "更多操作：${task.title}" },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "⋮",
+                    modifier = Modifier
+                        .size(spacing.touchTarget)
+                        .clickable { menuExpanded = true }
+                        .padding(top = 8.dp),
+                    color = colors.inkSoft,
+                    style = MaterialTheme.typography.titleLarge,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("删除", color = colors.cinnabar) },
+                        modifier = Modifier.testTag("delete_task_${task.id}"),
+                        onClick = {
+                            menuExpanded = false
+                            onDelete()
+                        },
+                    )
+                }
+            }
         }
     }
 }

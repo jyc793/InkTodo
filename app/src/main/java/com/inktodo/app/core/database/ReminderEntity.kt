@@ -33,6 +33,8 @@ data class ReminderEntity(
     val useSystemAlarm: Boolean,
     @ColumnInfo(name = "is_manually_stopped", defaultValue = "0")
     val isManuallyStopped: Boolean = false,
+    @ColumnInfo(name = "repeat_interval_minutes")
+    val repeatIntervalMinutes: Int? = null,
 )
 
 enum class ReminderKind {

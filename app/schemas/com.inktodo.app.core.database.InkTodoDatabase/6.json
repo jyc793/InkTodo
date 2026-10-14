@@ -1,0 +1,326 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 6,
+    "identityHash": "397ee5cc86b46b2dbe3f61c2bda9dd20",
+    "entities": [
+      {
+        "tableName": "tasks",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `title` TEXT NOT NULL, `note` TEXT, `task_date_epoch_day` INTEGER NOT NULL, `is_completed` INTEGER NOT NULL, `completed_at_epoch_millis` INTEGER, `created_at_epoch_millis` INTEGER NOT NULL, `updated_at_epoch_millis` INTEGER NOT NULL, `repeat_mode` TEXT NOT NULL DEFAULT 'NONE', `repeat_weekdays_mask` INTEGER NOT NULL DEFAULT 0, `recurrence_series_id` TEXT, `special_date_id` INTEGER, `special_occurrence_epoch_day` INTEGER, `special_offset_days` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "note",
+            "columnName": "note",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "taskDateEpochDay",
+            "columnName": "task_date_epoch_day",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isCompleted",
+            "columnName": "is_completed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "completedAtEpochMillis",
+            "columnName": "completed_at_epoch_millis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "createdAtEpochMillis",
+            "columnName": "created_at_epoch_millis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMillis",
+            "columnName": "updated_at_epoch_millis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "repeatMode",
+            "columnName": "repeat_mode",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'NONE'"
+          },
+          {
+            "fieldPath": "repeatWeekdaysMask",
+            "columnName": "repeat_weekdays_mask",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "recurrenceSeriesId",
+            "columnName": "recurrence_series_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "specialDateId",
+            "columnName": "special_date_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "specialOccurrenceEpochDay",
+            "columnName": "special_occurrence_epoch_day",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "specialOffsetDays",
+            "columnName": "special_offset_days",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_tasks_is_completed_task_date_epoch_day",
+            "unique": false,
+            "columnNames": [
+              "is_completed",
+              "task_date_epoch_day"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tasks_is_completed_task_date_epoch_day` ON `${TABLE_NAME}` (`is_completed`, `task_date_epoch_day`)"
+          },
+          {
+            "name": "index_tasks_updated_at_epoch_millis",
+            "unique": false,
+            "columnNames": [
+              "updated_at_epoch_millis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tasks_updated_at_epoch_millis` ON `${TABLE_NAME}` (`updated_at_epoch_millis`)"
+          },
+          {
+            "name": "index_tasks_recurrence_series_id_task_date_epoch_day",
+            "unique": true,
+            "columnNames": [
+              "recurrence_series_id",
+              "task_date_epoch_day"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_tasks_recurrence_series_id_task_date_epoch_day` ON `${TABLE_NAME}` (`recurrence_series_id`, `task_date_epoch_day`)"
+          },
+          {
+            "name": "index_tasks_special_date_id_special_occurrence_epoch_day_task_date_epoch_day",
+            "unique": true,
+            "columnNames": [
+              "special_date_id",
+              "special_occurrence_epoch_day",
+              "task_date_epoch_day"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_tasks_special_date_id_special_occurrence_epoch_day_task_date_epoch_day` ON `${TABLE_NAME}` (`special_date_id`, `special_occurrence_epoch_day`, `task_date_epoch_day`)"
+          }
+        ]
+      },
+      {
+        "tableName": "reminders",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`task_id` INTEGER NOT NULL, `kind` TEXT NOT NULL, `start_at_epoch_millis` INTEGER NOT NULL, `end_at_epoch_millis` INTEGER, `use_system_alarm` INTEGER NOT NULL, `is_manually_stopped` INTEGER NOT NULL DEFAULT 0, `repeat_interval_minutes` INTEGER, PRIMARY KEY(`task_id`), FOREIGN KEY(`task_id`) REFERENCES `tasks`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "taskId",
+            "columnName": "task_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startAtEpochMillis",
+            "columnName": "start_at_epoch_millis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endAtEpochMillis",
+            "columnName": "end_at_epoch_millis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "useSystemAlarm",
+            "columnName": "use_system_alarm",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isManuallyStopped",
+            "columnName": "is_manually_stopped",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "repeatIntervalMinutes",
+            "columnName": "repeat_interval_minutes",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "task_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_reminders_start_at_epoch_millis",
+            "unique": false,
+            "columnNames": [
+              "start_at_epoch_millis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_reminders_start_at_epoch_millis` ON `${TABLE_NAME}` (`start_at_epoch_millis`)"
+          },
+          {
+            "name": "index_reminders_end_at_epoch_millis",
+            "unique": false,
+            "columnNames": [
+              "end_at_epoch_millis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_reminders_end_at_epoch_millis` ON `${TABLE_NAME}` (`end_at_epoch_millis`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "tasks",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "task_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "special_dates",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `title` TEXT NOT NULL, `note` TEXT, `calendar_type` TEXT NOT NULL, `repeat_mode` TEXT NOT NULL, `gregorian_epoch_day` INTEGER, `lunar_month` INTEGER, `lunar_day` INTEGER, `lunar_is_leap_month` INTEGER NOT NULL DEFAULT 0, `reminder_enabled` INTEGER NOT NULL DEFAULT 1, `created_at_epoch_millis` INTEGER NOT NULL, `updated_at_epoch_millis` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "note",
+            "columnName": "note",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "calendarType",
+            "columnName": "calendar_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "repeatMode",
+            "columnName": "repeat_mode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gregorianEpochDay",
+            "columnName": "gregorian_epoch_day",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lunarMonth",
+            "columnName": "lunar_month",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lunarDay",
+            "columnName": "lunar_day",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lunarIsLeapMonth",
+            "columnName": "lunar_is_leap_month",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "reminderEnabled",
+            "columnName": "reminder_enabled",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
+          },
+          {
+            "fieldPath": "createdAtEpochMillis",
+            "columnName": "created_at_epoch_millis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMillis",
+            "columnName": "updated_at_epoch_millis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_special_dates_updated_at_epoch_millis",
+            "unique": false,
+            "columnNames": [
+              "updated_at_epoch_millis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_special_dates_updated_at_epoch_millis` ON `${TABLE_NAME}` (`updated_at_epoch_millis`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '397ee5cc86b46b2dbe3f61c2bda9dd20')"
+    ]
+  }
+}

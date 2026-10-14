@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="widget_paper">#18201E</color>
-    <color name="widget_ink">#EEF1EC</color>
-    <color name="widget_mist">#AAB6B1</color>
-    <color name="widget_indigo">#9CBEC3</color>
-    <color name="widget_jade">#80B5A4</color>
-    <color name="widget_jade_wash">#24332F</color>
-    <color name="widget_edge">#6680B5A4</color>
+    <color name="widget_paper">#101C23</color>
+    <color name="widget_ink">#F0F6F7</color>
+    <color name="widget_mist">#B7C8CE</color>
+    <color name="widget_indigo">#9CC3D0</color>
+    <color name="widget_jade">#87BAC3</color>
+    <color name="widget_jade_wash">#213843</color>
+    <color name="widget_edge">#806F9DAA</color>
     <color name="widget_cinnabar">#E27A6E</color>
 </resources>

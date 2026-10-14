@@ -15,8 +15,16 @@ data class CalendarMonthProjection(
     val selectedDate: LocalDate,
     val cells: List<LocalDate?>,
     val taskDates: Set<LocalDate>,
+    val daySummaries: Map<LocalDate, CalendarDaySummary>,
     val selectedTasks: List<TodoTask>,
+    val dayDecorations: Map<LocalDate, CalendarDayDecoration> = emptyMap(),
+    val selectedDecoration: CalendarDayDecoration? = null,
+    val holidayDataUpdateNeeded: Boolean = false,
 )
+
+data class CalendarDaySummary(val count: Int, val titles: List<String>) {
+    val preview: String get() = titles.joinToString("、")
+}
 
 object CalendarMonthBuilder {
     fun cells(month: YearMonth): List<LocalDate?> {
@@ -33,16 +41,28 @@ object CalendarMonthBuilder {
         selectedDate: LocalDate,
         today: LocalDate,
         zoneId: ZoneId = ZoneId.systemDefault(),
-    ): CalendarMonthProjection = CalendarMonthProjection(
-        month = month,
-        today = today,
-        selectedDate = selectedDate,
-        cells = cells(month),
-        taskDates = tasks.flatMapTo(mutableSetOf()) { it.coveredDatesIn(month, zoneId).asIterable() },
-        selectedTasks = tasks
-            .filter { it.coversDate(selectedDate, zoneId) }
-            .sortedByPreference(TaskSortOrder.TIME_ASCENDING),
-    )
+    ): CalendarMonthProjection {
+        val dates = tasks.flatMapTo(mutableSetOf()) { it.coveredDatesIn(month, zoneId).asIterable() }
+        val dailyTasks = dates.associateWith { date -> tasksForDate(tasks, date, zoneId) }
+        return CalendarMonthProjection(
+            month = month,
+            today = today,
+            selectedDate = selectedDate,
+            cells = cells(month),
+            taskDates = dates,
+            daySummaries = dailyTasks.mapValues { (_, dayTasks) ->
+                CalendarDaySummary(dayTasks.size, dayTasks.map(TodoTask::title))
+            },
+            selectedTasks = tasksForDate(tasks, selectedDate, zoneId),
+        )
+    }
+
+    private fun tasksForDate(tasks: List<TodoTask>, date: LocalDate, zoneId: ZoneId): List<TodoTask> =
+        tasks.filter { it.coversDate(date, zoneId) }
+            .groupBy { it.recurrenceSeriesId ?: "task-${it.id}" }
+            .values
+            .mapNotNull { series -> series.filter { !it.date.isAfter(date) }.maxByOrNull(TodoTask::date) }
+            .sortedByPreference(TaskSortOrder.TIME_ASCENDING)
 
     const val COLUMN_COUNT = 7
     const val CELL_COUNT = 42

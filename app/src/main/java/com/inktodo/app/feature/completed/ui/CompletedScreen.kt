@@ -29,6 +29,7 @@ import com.inktodo.app.feature.todo.domain.SystemAlarmRequest
 fun CompletedScreen(
     viewModel: CompletedViewModel,
     onOpenTask: (Long) -> Unit,
+    onEditTask: (Long) -> Unit,
     onSystemAlarmRequest: (SystemAlarmRequest) -> Unit,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -51,6 +52,7 @@ fun CompletedScreen(
             primaryActionLabel = "恢复",
             onPrimaryAction = viewModel::restore,
             onOpenTask = onOpenTask,
+            onEditTask = onEditTask,
             onDeleteTask = { pendingDelete = it },
             modifier = Modifier.padding(contentPadding),
         )

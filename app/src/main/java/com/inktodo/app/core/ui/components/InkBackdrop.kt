@@ -254,7 +254,7 @@ private fun DrawScope.drawSceneMark(scene: InkScene, colors: InkPalette, phase: 
     when (scene) {
         InkScene.TODO -> Unit
         InkScene.CALENDAR -> drawMoon(colors, phase)
-        InkScene.POMODORO -> drawWater(colors, phase)
+        InkScene.POMODORO -> Unit
         InkScene.COMPLETED -> drawCompletedHaze(colors, phase)
         InkScene.EDITOR -> drawPaperFibers(colors)
         InkScene.REMINDER -> drawCinnabarSeal(colors, phase)
@@ -291,20 +291,6 @@ private fun DrawScope.drawMoon(colors: InkPalette, phase: Float) {
             radius = radius * (1.22f + index * 0.22f),
             center = center,
             style = Stroke(width = 1f),
-        )
-    }
-}
-
-private fun DrawScope.drawWater(colors: InkPalette, phase: Float) {
-    val center = Offset(size.width * 0.5f, size.height * 0.37f)
-    repeat(5) { index ->
-        val localPhase = (phase + index * 0.2f) % 1f
-        val fade = sin(localPhase * PI).toFloat().coerceAtLeast(0f)
-        drawCircle(
-            color = colors.jade.copy(alpha = fade * 0.105f),
-            radius = size.minDimension * (0.16f + localPhase * 0.58f),
-            center = center,
-            style = Stroke(width = 1.1f + fade * 1.2f),
         )
     }
 }
@@ -412,8 +398,8 @@ private enum class MistDepth { FAR, MID, NEAR }
 
 private val InkScene.hasAmbientMotion: Boolean
     get() = when (this) {
-        InkScene.CALENDAR, InkScene.POMODORO, InkScene.COMPLETED, InkScene.REMINDER -> true
-        InkScene.TODO, InkScene.EDITOR, InkScene.SETTINGS -> false
+        InkScene.CALENDAR, InkScene.COMPLETED, InkScene.REMINDER -> true
+        InkScene.TODO, InkScene.POMODORO, InkScene.EDITOR, InkScene.SETTINGS -> false
     }
 
 private val InkScene.ambientDurationMillis: Int

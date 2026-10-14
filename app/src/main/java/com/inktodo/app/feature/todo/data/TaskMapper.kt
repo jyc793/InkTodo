@@ -5,6 +5,8 @@ import com.inktodo.app.core.database.ReminderKind
 import com.inktodo.app.core.database.TaskEntity
 import com.inktodo.app.core.database.TaskWithReminder
 import com.inktodo.app.core.model.TaskReminder
+import com.inktodo.app.core.model.RepeatMode
+import com.inktodo.app.core.model.TaskRecurrence
 import com.inktodo.app.core.model.TodoTask
 import java.time.Instant
 import java.time.LocalDate
@@ -37,6 +39,7 @@ internal fun TodoTask.toPersistenceModel(): TaskPersistenceModel {
                 endAtEpochMillis = value.endAt.toEpochMilli(),
                 useSystemAlarm = false,
                 isManuallyStopped = value.isManuallyStopped,
+                repeatIntervalMinutes = value.repeatIntervalMinutes,
             )
         }
     }
@@ -51,6 +54,12 @@ internal fun TodoTask.toPersistenceModel(): TaskPersistenceModel {
             completedAtEpochMillis = completedAt?.toEpochMilli(),
             createdAtEpochMillis = createdAt.toEpochMilli(),
             updatedAtEpochMillis = updatedAt.toEpochMilli(),
+            repeatMode = recurrence.mode.name,
+            repeatWeekdaysMask = recurrence.weekdaysMask,
+            recurrenceSeriesId = recurrenceSeriesId,
+            specialDateId = specialDateId,
+            specialOccurrenceEpochDay = specialOccurrenceDate?.toEpochDay(),
+            specialOffsetDays = specialOffsetDays,
         ),
         reminder = reminderEntity,
     )
@@ -69,6 +78,7 @@ internal fun TaskWithReminder.toDomain(): TodoTask {
                     requireNotNull(value.endAtEpochMillis) { "Time range reminder is missing its end time" },
                 ),
                 isManuallyStopped = value.isManuallyStopped,
+                repeatIntervalMinutes = value.repeatIntervalMinutes,
             )
         }
     }
@@ -82,5 +92,13 @@ internal fun TaskWithReminder.toDomain(): TodoTask {
         completedAt = task.completedAtEpochMillis?.let(Instant::ofEpochMilli),
         createdAt = Instant.ofEpochMilli(task.createdAtEpochMillis),
         updatedAt = Instant.ofEpochMilli(task.updatedAtEpochMillis),
+        recurrence = TaskRecurrence(
+            mode = RepeatMode.valueOf(task.repeatMode),
+            weekdaysMask = task.repeatWeekdaysMask,
+        ),
+        recurrenceSeriesId = task.recurrenceSeriesId,
+        specialDateId = task.specialDateId,
+        specialOccurrenceDate = task.specialOccurrenceEpochDay?.let(LocalDate::ofEpochDay),
+        specialOffsetDays = task.specialOffsetDays,
     )
 }

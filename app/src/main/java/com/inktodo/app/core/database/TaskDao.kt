@@ -43,6 +43,42 @@ abstract class TaskDao {
     )
     abstract suspend fun getSchedulableTasks(nowEpochMillis: Long): List<TaskWithReminder>
 
+    @Transaction
+    @Query("SELECT * FROM tasks WHERE recurrence_series_id = :seriesId AND task_date_epoch_day = :epochDay LIMIT 1")
+    abstract suspend fun findSeriesOccurrence(seriesId: String, epochDay: Long): TaskWithReminder?
+
+    @Transaction
+    @Query("SELECT * FROM tasks WHERE recurrence_series_id = :seriesId AND is_completed = 0 ORDER BY task_date_epoch_day")
+    abstract suspend fun getPendingSeriesTasks(seriesId: String): List<TaskWithReminder>
+
+    @Transaction
+    @Query("SELECT * FROM tasks WHERE recurrence_series_id IS NOT NULL AND is_completed = 0 ORDER BY task_date_epoch_day")
+    abstract suspend fun getPendingRecurringTasks(): List<TaskWithReminder>
+
+    @Transaction
+    @Query("SELECT * FROM tasks WHERE recurrence_series_id IS NOT NULL AND task_date_epoch_day < :beforeEpochDay ORDER BY task_date_epoch_day")
+    abstract suspend fun getExpiredRecurringTasks(beforeEpochDay: Long): List<TaskWithReminder>
+
+    @Transaction
+    @Query(
+        "SELECT * FROM tasks WHERE special_date_id = :specialDateId " +
+            "AND special_occurrence_epoch_day = :occurrenceEpochDay " +
+            "AND task_date_epoch_day = :taskEpochDay LIMIT 1",
+    )
+    abstract suspend fun findSpecialOccurrence(
+        specialDateId: Long,
+        occurrenceEpochDay: Long,
+        taskEpochDay: Long,
+    ): TaskWithReminder?
+
+    @Transaction
+    @Query("SELECT * FROM tasks WHERE special_date_id = :specialDateId ORDER BY task_date_epoch_day")
+    abstract suspend fun getSpecialDateTasks(specialDateId: Long): List<TaskWithReminder>
+
+    @Transaction
+    @Query("SELECT * FROM tasks WHERE special_date_id IS NOT NULL AND task_date_epoch_day < :beforeEpochDay")
+    abstract suspend fun getExpiredSpecialDateTasks(beforeEpochDay: Long): List<TaskWithReminder>
+
     @Insert
     protected abstract suspend fun insertTask(task: TaskEntity): Long
 

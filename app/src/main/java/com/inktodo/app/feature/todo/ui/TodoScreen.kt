@@ -25,13 +25,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.inktodo.app.core.model.TodoTask
 import com.inktodo.app.core.ui.theme.InkTheme
 import com.inktodo.app.core.ui.theme.InkScene
-import com.inktodo.app.core.ui.components.InkSecondaryButton
+import com.inktodo.app.core.ui.components.InkCompactButton
 
 @Composable
 fun TodoScreen(
     viewModel: TodoViewModel,
     onAddTask: () -> Unit,
     onOpenTask: (Long) -> Unit,
+    onEditTask: (Long) -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -64,10 +65,11 @@ fun TodoScreen(
             primaryActionLabel = "完成",
             onPrimaryAction = viewModel::complete,
             onOpenTask = onOpenTask,
+            onEditTask = onEditTask,
             onDeleteTask = { pendingDelete = it },
             modifier = Modifier.padding(contentPadding),
             headerAction = {
-                InkSecondaryButton(text = "提醒可靠性", onClick = onOpenSettings)
+                InkCompactButton(text = "提醒设置", onClick = onOpenSettings)
             },
         )
     }
@@ -76,7 +78,9 @@ fun TodoScreen(
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
             title = { Text("删除待办？") },
-            text = { Text("“${task.title}”将被永久删除。") },
+            text = { Text(if (task.recurrence.isRepeating) {
+                "“${task.title}”及同一重复系列中尚未完成的后续任务将被删除；过期的已完成重复记录也会自动清理。"
+            } else "“${task.title}”将被永久删除。") },
             confirmButton = {
                 TextButton(
                     modifier = Modifier

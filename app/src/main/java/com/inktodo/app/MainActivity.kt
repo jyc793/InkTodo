@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.os.Bundle
 import android.os.Build
+import android.os.SystemClock
 import android.view.WindowManager
 import android.widget.Toast
 import android.app.AlertDialog
@@ -16,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.SideEffect
 import androidx.core.view.WindowCompat
 import com.inktodo.app.core.alarm.SystemAlarmIntentFactory
+import com.inktodo.app.core.alarm.DailyMaintenanceScheduler
 import com.inktodo.app.core.alarm.ReminderHealthState
 import com.inktodo.app.core.model.TaskReminder
 import com.inktodo.app.core.ui.theme.InkTheme
@@ -25,10 +27,13 @@ import com.inktodo.app.feature.todo.domain.TaskCommandIssue
 import com.inktodo.app.feature.todo.domain.userMessage
 import com.inktodo.app.navigation.InkTodoApp
 import com.inktodo.app.core.datastore.UserPreferences
+import com.inktodo.app.core.datastore.PomodoroRunState
 import com.inktodo.app.core.ui.theme.resolveDarkTheme
+import com.inktodo.app.feature.pomodoro.floating.PomodoroFloatingTimerService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import java.time.ZoneId
 import java.time.Instant
 import java.time.format.DateTimeFormatter
@@ -37,19 +42,19 @@ class MainActivity : ComponentActivity() {
     private val openTaskId = MutableStateFlow<Long?>(null)
     private val reliabilityPromptToken = MutableStateFlow(0L)
     private val openPomodoroToken = MutableStateFlow(0L)
+    private val openHolidayInfoToken = MutableStateFlow(0L)
+    private var lastReminderRecoveryAt = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         handleLaunchIntent(intent)
         enableEdgeToEdge()
         val appContainer = (application as InkTodoApplication).appContainer
-        lifecycleScope.launch(Dispatchers.IO) {
-            appContainer.reminderRecoveryCoordinator.recover(userUnlocked = true)
-        }
         setContent {
             val pendingTaskId by openTaskId.collectAsStateWithLifecycle()
             val pendingReliabilityPrompt by reliabilityPromptToken.collectAsStateWithLifecycle()
             val pendingPomodoroOpen by openPomodoroToken.collectAsStateWithLifecycle()
+            val pendingHolidayInfoOpen by openHolidayInfoToken.collectAsStateWithLifecycle()
             val userPreferences by appContainer.preferencesRepository.preferences
                 .collectAsStateWithLifecycle(initialValue = UserPreferences())
             val darkTheme = userPreferences.themeMode.resolveDarkTheme(
@@ -72,13 +77,37 @@ class MainActivity : ComponentActivity() {
                     pomodoroCoordinator = appContainer.pomodoroCoordinator,
                     fullFocusController = appContainer.fullFocusController,
                     widgetUpdater = appContainer.widgetUpdater,
+                    specialDateRepository = appContainer.specialDateRepository,
+                    offlineCalendarService = appContainer.offlineCalendarService,
+                    specialDateTaskCoordinator = appContainer.specialDateTaskCoordinator,
                     openPomodoroToken = pendingPomodoroOpen,
                     reliabilityPromptToken = pendingReliabilityPrompt,
                     openTaskId = pendingTaskId,
+                    openHolidayInfoToken = pendingHolidayInfoOpen,
                     onOpenTaskConsumed = { openTaskId.value = null },
                     onSystemAlarmRequest = ::openSystemAlarm,
                     onTaskCommandResult = ::handleTaskCommandResult,
                 )
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        DailyMaintenanceScheduler.scheduleNext(this)
+        val elapsed = SystemClock.elapsedRealtime()
+        if (lastReminderRecoveryAt != 0L && elapsed - lastReminderRecoveryAt < 30_000L) return
+        lastReminderRecoveryAt = elapsed
+        val container = (application as InkTodoApplication).appContainer
+        lifecycleScope.launch(Dispatchers.IO) {
+            container.reminderRecoveryCoordinator.recover(userUnlocked = true)
+            val preferences = container.preferencesRepository.preferences.first()
+            if (
+                preferences.pomodoroSession.floatingVisible &&
+                preferences.pomodoroSession.runState != PomodoroRunState.IDLE &&
+                !preferences.fullFocus.enabled
+            ) {
+                PomodoroFloatingTimerService.restore(this@MainActivity)
             }
         }
     }
@@ -94,6 +123,9 @@ class MainActivity : ComponentActivity() {
         if (taskId > 0) openTaskId.value = taskId
         if (launchIntent?.getBooleanExtra(EXTRA_OPEN_POMODORO, false) == true) {
             openPomodoroToken.value += 1
+        }
+        if (launchIntent?.getBooleanExtra(EXTRA_OPEN_HOLIDAY_INFO, false) == true) {
+            openHolidayInfoToken.value += 1
         }
         if (launchIntent?.getBooleanExtra(EXTRA_FULL_SCREEN_REMINDER, false) == true) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -134,11 +166,13 @@ class MainActivity : ComponentActivity() {
     private fun openSystemAlarm(request: SystemAlarmRequest) {
         val target = request.triggerAt.atZone(ZoneId.systemDefault())
         val formatted = SYSTEM_ALARM_DATE_TIME.format(target)
+        val repeatDescription = if (request.repeatDays.isEmpty()) "" else
+            "\n重复：${request.repeatDays.sortedBy { it.value }.joinToString("、") { "周${"一二三四五六日"[it.value - 1]}" }}"
         AlertDialog.Builder(this)
             .setTitle("请核对系统闹钟日期")
             .setMessage(
-                "任务时间：$formatted\n\nAndroid 只能把小时和分钟交给系统时钟，不能传递具体年月日。" +
-                    "请在接下来的 HyperOS 时钟页面确认日期/重复规则并保存；墨待不会再重复播放正式提醒。",
+                "任务时间：$formatted$repeatDescription\n\nAndroid 会把时间和重复星期交给系统时钟，具体日期仍需在时钟页面确认。" +
+                    "请核对后保存；墨待不重复播放正式提醒。",
             )
             .setPositiveButton("打开系统时钟") { _, _ -> launchSystemAlarm(request) }
             .setCancelable(false)
@@ -197,6 +231,7 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_OPEN_TASK_ID = "com.inktodo.app.extra.OPEN_TASK_ID"
         const val EXTRA_FULL_SCREEN_REMINDER = "com.inktodo.app.extra.FULL_SCREEN_REMINDER"
         const val EXTRA_OPEN_POMODORO = "com.inktodo.app.extra.OPEN_POMODORO"
+        const val EXTRA_OPEN_HOLIDAY_INFO = "com.inktodo.app.extra.OPEN_HOLIDAY_INFO"
         private val SYSTEM_ALARM_DATE_TIME = DateTimeFormatter.ofPattern("yyyy年M月d日 HH:mm")
     }
 }

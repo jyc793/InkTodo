@@ -1,9 +1,11 @@
 package com.inktodo.app.feature.todo.domain
 
 import com.inktodo.app.core.model.ReminderType
+import com.inktodo.app.core.model.RepeatMode
 import com.inktodo.app.core.model.TaskReminder
 import com.inktodo.app.core.model.TodoTask
 import java.time.Instant
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
@@ -77,6 +79,67 @@ class TaskDraftValidatorTest {
                 rangeEndTime = LocalTime.of(14, 0),
             ),
             "结束时间必须晚于当前时间。",
+        )
+    }
+
+    @Test
+    fun dailyAtTimePastTodayMovesToTomorrow() {
+        val result = TaskDraftValidator.validate(
+            draft(atTime = LocalTime.of(14, 0)).copy(repeatMode = RepeatMode.DAILY),
+            now,
+            zone,
+        ) as TaskDraftValidation.Valid
+
+        assertEquals(Instant.parse("2026-08-26T14:00:00Z"), result.reminder.startAt)
+    }
+
+    @Test
+    fun weeklyOnlySchedulesSelectedWeekdays() {
+        val result = TaskDraftValidator.validate(
+            draft().copy(
+                repeatMode = RepeatMode.WEEKLY,
+                repeatWeekdays = setOf(DayOfWeek.THURSDAY),
+            ),
+            now,
+            zone,
+        ) as TaskDraftValidation.Valid
+
+        assertEquals(Instant.parse("2026-08-27T15:00:00Z"), result.reminder.startAt)
+    }
+
+    @Test
+    fun weeklyRequiresAtLeastOneDay() {
+        assertInvalid(draft().copy(repeatMode = RepeatMode.WEEKLY), "请至少选择一个重复的星期。")
+    }
+
+    @Test
+    fun repeatingRangeLongerThanDayIsRejectedWithoutAffectingOneOffRange() {
+        assertInvalid(
+            draft(
+                reminderType = ReminderType.TIME_RANGE,
+                rangeEndDate = LocalDate.of(2026, 8, 27),
+            ).copy(repeatMode = RepeatMode.DAILY),
+            "重复的持续提醒每次须短于 24 小时；长时间段仍可选择不重复。",
+        )
+    }
+
+    @Test
+    fun recurringRangeAcceptsCustomIntervalShorterThanDuration() {
+        val result = TaskDraftValidator.validate(
+            draft(reminderType = ReminderType.TIME_RANGE)
+                .copy(repeatMode = RepeatMode.DAILY, repeatIntervalMinutes = 30),
+            now, zone,
+        ) as TaskDraftValidation.Valid
+        assertEquals(30, (result.reminder as TaskReminder.TimeRange).repeatIntervalMinutes)
+    }
+
+    @Test
+    fun intervalLongerThanRangeIsRejected() {
+        assertInvalid(
+            draft(reminderType = ReminderType.TIME_RANGE)
+                .copy(repeatMode = RepeatMode.WEEKLY,
+                    repeatWeekdays = setOf(DayOfWeek.TUESDAY), repeatIntervalMinutes = 60),
+            "间隔时间必须短于每次持续时间。",
         )
     }
 

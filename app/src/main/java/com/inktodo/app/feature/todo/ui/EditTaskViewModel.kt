@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.inktodo.app.core.model.ReminderType
+import com.inktodo.app.core.model.RepeatMode
 import com.inktodo.app.core.model.TodoTask
 import com.inktodo.app.core.datastore.PreferencesRepository
 import com.inktodo.app.feature.todo.domain.TaskDraft
@@ -16,6 +17,7 @@ import com.inktodo.app.feature.todo.domain.toDraft
 import com.inktodo.app.feature.todo.domain.toTodoTask
 import com.inktodo.app.feature.todo.domain.withReusablePreferences
 import java.time.Clock
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -36,6 +38,7 @@ data class EditTaskUiState(
     val isExistingTask: Boolean = false,
     val canStopOngoingReminder: Boolean = false,
     val validationMessage: String? = null,
+    val recurrenceRuleLocked: Boolean = false,
 )
 
 sealed interface EditTaskEvent {
@@ -75,7 +78,8 @@ class EditTaskViewModel(
     fun setNote(value: String) = edit { copy(note = value) }
     fun setDate(value: LocalDate) = edit { copy(date = value) }
     fun setReminderType(value: ReminderType) {
-        edit { copy(reminderType = value) }
+        edit { copy(reminderType = value, repeatIntervalMinutes =
+            if (value == ReminderType.TIME_RANGE) repeatIntervalMinutes else null) }
         viewModelScope.launch { preferencesRepository.setLastReminderType(value) }
     }
     fun setAtTime(value: LocalTime) = edit { copy(atTime = value) }
@@ -86,6 +90,16 @@ class EditTaskViewModel(
     fun setUseSystemAlarm(value: Boolean) {
         edit { copy(useSystemAlarm = value) }
         viewModelScope.launch { preferencesRepository.setLastUseSystemAlarm(value) }
+    }
+    fun setRepeatMode(value: RepeatMode) {
+        if (_uiState.value.recurrenceRuleLocked) return
+        edit { copy(repeatMode = value,
+            repeatIntervalMinutes = if (value == RepeatMode.NONE) null else repeatIntervalMinutes) }
+    }
+    fun setRepeatIntervalMinutes(value: Int?) = edit { copy(repeatIntervalMinutes = value) }
+    fun toggleRepeatWeekday(day: DayOfWeek) = edit {
+        if (_uiState.value.recurrenceRuleLocked) this
+        else copy(repeatWeekdays = if (day in repeatWeekdays) repeatWeekdays - day else repeatWeekdays + day)
     }
 
     private fun loadNewTaskPreferences() {
@@ -102,7 +116,21 @@ class EditTaskViewModel(
         val state = _uiState.value
         if (state.isLoading || state.isSaving) return
         val now = ZonedDateTime.now(clock).withZoneSameInstant(zoneId)
-        when (val result = TaskDraftValidator.validate(state.draft, now, zoneId)) {
+        val original = existingTask?.toDraft(zoneId)
+        val unchangedTiming = original != null && state.draft.reminderType == original.reminderType &&
+            state.draft.date == original.date && state.draft.atTime == original.atTime &&
+            state.draft.rangeStartDate == original.rangeStartDate &&
+            state.draft.rangeStartTime == original.rangeStartTime &&
+            state.draft.rangeEndDate == original.rangeEndDate &&
+            state.draft.rangeEndTime == original.rangeEndTime &&
+            state.draft.useSystemAlarm == original.useSystemAlarm &&
+            state.draft.repeatMode == original.repeatMode &&
+            state.draft.repeatWeekdays == original.repeatWeekdays &&
+            state.draft.repeatIntervalMinutes == original.repeatIntervalMinutes
+        val validation = if (unchangedTiming && state.draft.title.isNotBlank()) {
+            TaskDraftValidation.Valid(checkNotNull(existingTask?.reminder))
+        } else TaskDraftValidator.validate(state.draft, now, zoneId)
+        when (val result = validation) {
             is TaskDraftValidation.Invalid -> {
                 _uiState.update { it.copy(validationMessage = result.message) }
             }
@@ -181,6 +209,7 @@ class EditTaskViewModel(
                 isLoading = false,
                 isExistingTask = true,
                 canStopOngoingReminder = task.hasActiveRangeReminder(Instant.now(clock)),
+                recurrenceRuleLocked = task.recurrence.isRepeating,
             )
         }
     }

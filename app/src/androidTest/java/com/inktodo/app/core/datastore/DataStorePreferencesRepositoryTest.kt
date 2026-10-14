@@ -55,6 +55,11 @@ class DataStorePreferencesRepositoryTest {
         assertEquals(ReminderType.AT_TIME, values.lastReminderType)
         assertFalse(values.lastUseSystemAlarm)
         assertEquals(ThemeMode.SYSTEM, values.themeMode)
+        assertFalse(values.highRefreshRateAnimations)
+        assertFalse(values.pomodoroSession.ordinaryImmersive)
+        assertFalse(values.pomodoroSession.floatingVisible)
+        assertEquals(1f, values.pomodoroFloatingXFraction)
+        assertEquals(0.28f, values.pomodoroFloatingYFraction)
     }
 
     @Test
@@ -65,11 +70,15 @@ class DataStorePreferencesRepositoryTest {
         repository.setThemeMode(ThemeMode.DARK)
         repository.setTaskSortOrder(TaskSortOrder.CREATED_DESCENDING)
         repository.setWidgetMaxTasks(9)
+        repository.setHighRefreshRateAnimations(true)
+        repository.setPomodoroFloatingPosition(0.17f, 0.63f)
         repository.setPomodoroSession(
             PomodoroSessionPreferences(
                 phase = PomodoroPhase.BREAK,
                 runState = PomodoroRunState.PAUSED,
                 pausedRemainingMillis = 123_000L,
+                ordinaryImmersive = true,
+                floatingVisible = true,
             ),
         )
 
@@ -82,10 +91,15 @@ class DataStorePreferencesRepositoryTest {
                 themeMode = ThemeMode.DARK,
                 taskSortOrder = TaskSortOrder.CREATED_DESCENDING,
                 widgetMaxTasks = 9,
+                highRefreshRateAnimations = true,
+                pomodoroFloatingXFraction = 0.17f,
+                pomodoroFloatingYFraction = 0.63f,
                 pomodoroSession = PomodoroSessionPreferences(
                     phase = PomodoroPhase.BREAK,
                     runState = PomodoroRunState.PAUSED,
                     pausedRemainingMillis = 123_000L,
+                    ordinaryImmersive = true,
+                    floatingVisible = true,
                 ),
             ),
             repository.preferences.first(),

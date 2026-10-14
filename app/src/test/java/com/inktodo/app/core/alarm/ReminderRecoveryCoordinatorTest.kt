@@ -2,6 +2,7 @@ package com.inktodo.app.core.alarm
 
 import com.inktodo.app.core.model.TaskReminder
 import com.inktodo.app.core.model.TodoTask
+import com.inktodo.app.core.model.TaskRecurrence
 import com.inktodo.app.feature.todo.domain.TaskRepository
 import java.time.Clock
 import java.time.Instant
@@ -109,6 +110,25 @@ class ReminderRecoveryCoordinatorTest {
         assertEquals(listOf(34L), store.getAll().map(ScheduledTaskSnapshot::taskId))
     }
 
+    @Test
+    fun unlockedRecoveryAdvancesMissedRepeatingTask() = runBlocking {
+        val missed = task(35, "每日复习", "2026-08-24T10:00:00Z")
+            .copy(recurrence = TaskRecurrence.DAILY, recurrenceSeriesId = "daily-35")
+        val repository = FakeRepository(listOf(missed))
+        val advanced = mutableListOf<Long>()
+        val coordinator = ReminderRecoveryCoordinator(
+            repository = { repository },
+            snapshotStore = FakeStore(emptyList()),
+            scheduler = FakeScheduler(),
+            clock = Clock.fixed(now, ZoneOffset.UTC),
+            advanceRecurrence = { taskId, _ -> advanced += taskId },
+        )
+
+        coordinator.recover(userUnlocked = true)
+
+        assertEquals(listOf(35L), advanced)
+    }
+
     private fun coordinator(
         repository: FakeRepository,
         store: FakeStore,
@@ -194,5 +214,7 @@ class ReminderRecoveryCoordinatorTest {
             wasQueriedForRecovery = true
             return recoveryTasks
         }
+        override suspend fun getPendingRecurringTasks(): List<TodoTask> =
+            recoveryTasks.filter { it.recurrence.isRepeating }
     }
 }

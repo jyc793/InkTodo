@@ -93,7 +93,7 @@ class ReminderPlannerTest {
             listOf(
                 PlannedReminderAlarm(ReminderAlarmKind.RANGE_START, Instant.parse("2026-08-27T10:00:00Z")),
                 PlannedReminderAlarm(ReminderAlarmKind.RANGE_END, Instant.parse("2026-09-03T16:30:00Z")),
-                PlannedReminderAlarm(ReminderAlarmKind.RANGE_RENEW, Instant.parse("2026-08-29T10:00:00Z")),
+                PlannedReminderAlarm(ReminderAlarmKind.RANGE_RENEW, Instant.parse("2026-08-27T16:00:00Z")),
             ),
             plan.alarms,
         )
@@ -109,6 +109,48 @@ class ReminderPlannerTest {
             listOf(PlannedReminderAlarm(ReminderAlarmKind.PRE_REMINDER, Instant.parse("2026-08-25T09:45:00Z"))),
             plan.alarms,
         )
+    }
+
+    @Test
+    fun repeatingSystemClockTaskAdvancesAtFormalTime() {
+        val snapshot = atTime("2026-08-25T10:00:00Z")
+            .copy(useSystemAlarm = true, isRepeating = true)
+
+        assertEquals(
+            listOf(ReminderAlarmKind.PRE_REMINDER, ReminderAlarmKind.REPEAT_ADVANCE),
+            ReminderPlanner.plan(snapshot, now).alarms.map(PlannedReminderAlarm::kind),
+        )
+    }
+
+    @Test
+    fun recurringRangeSchedulesOnlyNextIntervalAndNeverAtEnd() {
+        val snapshot = range("2026-08-25T10:00:00Z", "2026-08-25T12:00:00Z")
+            .copy(isRepeating = true, repeatIntervalMinutes = 30)
+        val initial = ReminderPlanner.plan(snapshot, now)
+        assertEquals(Instant.parse("2026-08-25T10:30:00Z"),
+            initial.alarms.single { it.kind == ReminderAlarmKind.RANGE_INTERVAL }.triggerAt)
+        val midRange = ReminderPlanner.plan(snapshot, Instant.parse("2026-08-25T10:34:00Z"))
+        assertEquals(Instant.parse("2026-08-25T11:00:00Z"),
+            midRange.alarms.single { it.kind == ReminderAlarmKind.RANGE_INTERVAL }.triggerAt)
+        assertTrue(ReminderPlanner.plan(snapshot, Instant.parse("2026-08-25T11:45:00Z"))
+            .alarms.none { it.kind == ReminderAlarmKind.RANGE_INTERVAL })
+        assertTrue(ReminderPlanner.isIntervalTick(snapshot, Instant.parse("2026-08-25T11:00:00Z")))
+        assertFalse(ReminderPlanner.isIntervalTick(snapshot, Instant.parse("2026-08-25T11:01:00Z")))
+    }
+
+    @Test
+    fun specialDateRangeConfirmsAtSevenThenHourlyThroughTwentyThreeOnly() {
+        val snapshot = range("2026-06-06T07:00:00Z", "2026-06-07T00:00:00Z")
+            .copy(repeatIntervalMinutes = 60, confirmAtRangeStart = true)
+        val initial = ReminderPlanner.plan(snapshot, Instant.parse("2026-06-06T06:00:00Z"))
+        assertTrue(initial.alarms.any { it.kind == ReminderAlarmKind.RANGE_START && it.triggerAt == snapshot.startAt })
+        assertEquals(
+            Instant.parse("2026-06-06T08:00:00Z"),
+            initial.alarms.single { it.kind == ReminderAlarmKind.RANGE_INTERVAL }.triggerAt,
+        )
+        val last = ReminderPlanner.intervalAfter(snapshot, Instant.parse("2026-06-06T22:30:00Z"))
+        assertEquals(Instant.parse("2026-06-06T23:00:00Z"), last?.triggerAt)
+        assertEquals(null, ReminderPlanner.intervalAfter(snapshot, Instant.parse("2026-06-06T23:00:00Z")))
     }
 
     private fun atTime(start: String) = ScheduledTaskSnapshot(

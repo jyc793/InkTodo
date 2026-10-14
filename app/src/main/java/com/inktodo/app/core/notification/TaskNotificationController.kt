@@ -15,16 +15,19 @@ import com.inktodo.app.MainActivity
 import com.inktodo.app.core.reminder.FormalReminderActivity
 import com.inktodo.app.R
 import com.inktodo.app.core.alarm.ScheduledTaskSnapshot
+import com.inktodo.app.core.alarm.ReminderSnapshotKind
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 interface TaskNotificationController {
     fun createChannels()
     fun canPostNotifications(): Boolean
+    fun canPostChannel(channelId: String): Boolean = canPostNotifications()
     fun showPreReminder(snapshot: ScheduledTaskSnapshot)
     fun showFormalReminder(snapshot: ScheduledTaskSnapshot, alert: Boolean = true)
     fun buildFormalNotification(snapshot: ScheduledTaskSnapshot, alert: Boolean = true): Notification
     fun formalNotificationId(taskId: Long): Int
+    fun hasActiveFormal(taskId: Long): Boolean = false
     fun cancelFormal(taskId: Long)
     fun showRangeStarted(snapshot: ScheduledTaskSnapshot, alert: Boolean = true)
     fun cancelRange(taskId: Long)
@@ -60,7 +63,7 @@ class AndroidTaskNotificationController(
             description = "任务正式时间的强提醒"
             enableVibration(true)
             vibrationPattern = longArrayOf(0, 500, 250, 700)
-            setSound(null, null)
+            setSound(Settings.System.DEFAULT_NOTIFICATION_URI, reminderAttributes)
             lockscreenVisibility = Notification.VISIBILITY_PUBLIC
         }
         val rangeReminder = NotificationChannel(
@@ -90,11 +93,17 @@ class AndroidTaskNotificationController(
     }
 
     override fun canPostNotifications(): Boolean =
-        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        manager.areNotificationsEnabled() &&
+            (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
+
+    override fun canPostChannel(channelId: String): Boolean =
+        canPostNotifications() &&
+            (manager.getNotificationChannel(channelId)?.importance ?: NotificationManager.IMPORTANCE_NONE) !=
+            NotificationManager.IMPORTANCE_NONE
 
     override fun showPreReminder(snapshot: ScheduledTaskSnapshot) {
-        if (!canPostNotifications()) return
+        if (!canPostChannel(CHANNEL_PRE_REMINDER)) return
         manager.notify(
             notificationId(snapshot.taskId, TYPE_PRE),
             baseBuilder(snapshot, CHANNEL_PRE_REMINDER)
@@ -107,14 +116,32 @@ class AndroidTaskNotificationController(
     }
 
     override fun showFormalReminder(snapshot: ScheduledTaskSnapshot, alert: Boolean) {
-        if (!canPostNotifications()) return
+        if (!canPostChannel(CHANNEL_FORMAL_REMINDER)) return
         manager.notify(notificationId(snapshot.taskId, TYPE_FORMAL), buildFormalNotification(snapshot, alert))
     }
 
     override fun buildFormalNotification(snapshot: ScheduledTaskSnapshot, alert: Boolean): Notification {
         val confirmationIntent = formalConfirmationIntent(snapshot)
-        val builder = baseBuilder(snapshot, CHANNEL_FORMAL_REMINDER, confirmationIntent)
-            .setContentTitle("时间到了：${snapshot.title}")
+        if (!alert) {
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    CHANNEL_FORMAL_RESTORE,
+                    "待确认提醒恢复",
+                    NotificationManager.IMPORTANCE_DEFAULT,
+                ).apply {
+                    setSound(null, null)
+                    enableVibration(false)
+                    lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                },
+            )
+        }
+        val builder = baseBuilder(
+            snapshot,
+            if (alert) CHANNEL_FORMAL_REMINDER else CHANNEL_FORMAL_RESTORE,
+            confirmationIntent,
+        )
+            .setContentTitle(if (snapshot.kind == ReminderSnapshotKind.TIME_RANGE)
+                "进行中，请确认：${snapshot.title}" else "时间到了：${snapshot.title}")
             .setContentText("点击打开确认页；确认前提醒会持续保留。")
             .setCategory(Notification.CATEGORY_ALARM)
             .setOngoing(true)
@@ -132,9 +159,12 @@ class AndroidTaskNotificationController(
 
     override fun formalNotificationId(taskId: Long): Int = notificationId(taskId, TYPE_FORMAL)
 
+    override fun hasActiveFormal(taskId: Long): Boolean =
+        manager.activeNotifications.any { it.id == formalNotificationId(taskId) }
+
     override fun showRangeStarted(snapshot: ScheduledTaskSnapshot, alert: Boolean) {
-        if (!canPostNotifications()) return
-        if (alert) {
+        if (!canPostChannel(CHANNEL_RANGE_PERSISTENT)) return
+        if (alert && canPostChannel(CHANNEL_RANGE_REMINDER)) {
             manager.notify(
                 notificationId(snapshot.taskId, TYPE_RANGE_ALERT),
                 baseBuilder(snapshot, CHANNEL_RANGE_REMINDER)
@@ -212,7 +242,8 @@ class AndroidTaskNotificationController(
     private fun formalConfirmationIntent(snapshot: ScheduledTaskSnapshot): PendingIntent = PendingIntent.getActivity(
         context,
         requestCode(snapshot.taskId, TYPE_FULL_SCREEN),
-        FormalReminderActivity.createIntent(context, snapshot.taskId, snapshot.title, snapshot.note),
+        FormalReminderActivity.createIntent(context, snapshot.taskId, snapshot.title, snapshot.note,
+            preserveSnapshot = snapshot.kind == ReminderSnapshotKind.TIME_RANGE),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 
@@ -234,7 +265,8 @@ class AndroidTaskNotificationController(
 
     companion object {
         const val CHANNEL_PRE_REMINDER = "task_pre_reminder_v1"
-        const val CHANNEL_FORMAL_REMINDER = "task_formal_reminder_v3"
+        const val CHANNEL_FORMAL_REMINDER = "task_formal_reminder_v4"
+        const val CHANNEL_FORMAL_RESTORE = "task_formal_restore_v2"
         const val CHANNEL_RANGE_REMINDER = "task_range_alert_v2"
         const val CHANNEL_RANGE_PERSISTENT = "task_range_persistent_v2"
         @Deprecated("Use CHANNEL_RANGE_PERSISTENT")
@@ -249,6 +281,7 @@ class AndroidTaskNotificationController(
         internal val OBSOLETE_CHANNEL_IDS = listOf(
             "task_formal_reminder_v1",
             "task_formal_reminder_v2",
+            "task_formal_reminder_v3",
             "task_formal_pending_v1",
             "task_range_reminder_v1",
             "task_range_restore_v1",

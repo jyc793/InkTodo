@@ -16,15 +16,15 @@ internal val InkTypography = Typography(
     displaySmall = androidx.compose.ui.text.TextStyle(
         fontFamily = FontFamily.Serif,
         fontWeight = FontWeight.Medium,
-        fontSize = 36.sp,
-        lineHeight = 44.sp,
+        fontSize = 24.sp,
+        lineHeight = 30.sp,
         letterSpacing = 1.sp,
     ),
     headlineMedium = androidx.compose.ui.text.TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 24.sp,
-        lineHeight = 32.sp,
+        fontSize = 22.sp,
+        lineHeight = 30.sp,
     ),
     headlineSmall = androidx.compose.ui.text.TextStyle(
         fontFamily = FontFamily.SansSerif,
@@ -35,14 +35,14 @@ internal val InkTypography = Typography(
     titleLarge = androidx.compose.ui.text.TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 20.sp,
-        lineHeight = 28.sp,
+        fontSize = 18.sp,
+        lineHeight = 26.sp,
     ),
     titleMedium = androidx.compose.ui.text.TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Medium,
-        fontSize = 17.sp,
-        lineHeight = 24.sp,
+        fontSize = 16.sp,
+        lineHeight = 22.sp,
     ),
     titleSmall = androidx.compose.ui.text.TextStyle(
         fontFamily = FontFamily.SansSerif,
@@ -53,8 +53,8 @@ internal val InkTypography = Typography(
     bodyLarge = androidx.compose.ui.text.TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Normal,
-        fontSize = 16.sp,
-        lineHeight = 25.sp,
+        fontSize = 15.sp,
+        lineHeight = 22.sp,
     ),
     bodyMedium = androidx.compose.ui.text.TextStyle(
         fontFamily = FontFamily.SansSerif,

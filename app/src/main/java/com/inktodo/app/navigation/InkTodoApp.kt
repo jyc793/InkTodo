@@ -4,9 +4,14 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
@@ -17,9 +22,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.inktodo.app.core.datastore.UserPreferences
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.FrameRateCategory
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.preferredFrameRate
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -40,6 +53,14 @@ import com.inktodo.app.feature.todo.domain.TaskCommandService
 import com.inktodo.app.feature.todo.domain.TaskCommandIssueNoticeGate
 import com.inktodo.app.feature.calendar.ui.CalendarScreen
 import com.inktodo.app.feature.calendar.ui.CalendarViewModel
+import com.inktodo.app.feature.calendar.ui.HolidayDataInfoScreen
+import com.inktodo.app.feature.calendar.ui.SpecialDateEditScreen
+import com.inktodo.app.feature.calendar.ui.SpecialDateEditViewModel
+import com.inktodo.app.feature.calendar.ui.SpecialDateListScreen
+import com.inktodo.app.feature.calendar.ui.SpecialDateListViewModel
+import com.inktodo.app.feature.calendar.domain.OfflineCalendarService
+import com.inktodo.app.feature.calendar.domain.SpecialDateRepository
+import com.inktodo.app.feature.calendar.domain.SpecialDateTaskCoordinator
 import com.inktodo.app.feature.completed.ui.CompletedViewModel
 import com.inktodo.app.feature.completed.ui.CompletedScreen
 import com.inktodo.app.feature.pomodoro.ui.PomodoroScreen
@@ -51,6 +72,8 @@ import com.inktodo.app.feature.todo.ui.EditTaskViewModel
 import com.inktodo.app.feature.todo.ui.EditTaskScreen
 import com.inktodo.app.feature.todo.ui.TodoViewModel
 import com.inktodo.app.feature.todo.ui.TodoScreen
+import com.inktodo.app.feature.todo.ui.TaskDetailScreen
+import com.inktodo.app.feature.todo.ui.TaskDetailViewModel
 import com.inktodo.app.core.datastore.PreferencesRepository
 import com.inktodo.app.feature.pomodoro.domain.PomodoroCoordinator
 import com.inktodo.app.feature.pomodoro.ui.PomodoroViewModel
@@ -68,9 +91,13 @@ fun InkTodoApp(
     pomodoroCoordinator: PomodoroCoordinator,
     fullFocusController: FullFocusController,
     widgetUpdater: WidgetUpdater,
+    specialDateRepository: SpecialDateRepository,
+    offlineCalendarService: OfflineCalendarService,
+    specialDateTaskCoordinator: SpecialDateTaskCoordinator,
     openPomodoroToken: Long = 0,
     reliabilityPromptToken: Long = 0,
     openTaskId: Long? = null,
+    openHolidayInfoToken: Long = 0,
     onOpenTaskConsumed: () -> Unit = {},
     onSystemAlarmRequest: (SystemAlarmRequest) -> Unit = {},
     onTaskCommandResult: (TaskCommandResult) -> Unit = {},
@@ -79,22 +106,36 @@ fun InkTodoApp(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val showBottomBar = AppDestination.bottomDestinations.any { it.route == currentRoute }
+    var pomodoroBottomBarVisible by rememberSaveable { mutableStateOf(true) }
+    var pomodoroTransitionRunning by remember { mutableStateOf(false) }
     val motion = InkTheme.motion
     val scene = when (currentRoute) {
         AppDestination.Calendar.route -> InkScene.CALENDAR
         AppDestination.Pomodoro.route -> InkScene.POMODORO
         AppDestination.Completed.route -> InkScene.COMPLETED
         AppDestination.Settings.route -> InkScene.SETTINGS
-        AppDestination.EditTask.route, AppDestination.EDIT_TASK_PATTERN -> InkScene.EDITOR
+        AppDestination.SpecialDates.route,
+        AppDestination.EditSpecialDate.route, AppDestination.EDIT_SPECIAL_DATE_PATTERN,
+        AppDestination.HolidayDataInfo.route -> InkScene.CALENDAR
+        AppDestination.EditTask.route, AppDestination.EDIT_TASK_PATTERN,
+        AppDestination.TaskDetail.route, AppDestination.TASK_DETAIL_PATTERN -> InkScene.EDITOR
         else -> InkScene.TODO
+    }
+    val contentMaxWidth = when (currentRoute) {
+        AppDestination.Calendar.route -> 1280.dp
+        AppDestination.Pomodoro.route -> 960.dp
+        AppDestination.Todo.route, AppDestination.Completed.route -> 1040.dp
+        AppDestination.TaskDetail.route, AppDestination.TASK_DETAIL_PATTERN -> 720.dp
+        else -> 880.dp
     }
     var showReliabilityPrompt by remember { mutableStateOf(false) }
     val userPreferences by preferencesRepository.preferences
         .collectAsStateWithLifecycle(initialValue = UserPreferences())
+    val bottomBarContentPadding = InkTheme.spacing.bottomBarHeight + InkTheme.spacing.xs * 2
 
     LaunchedEffect(openTaskId) {
         openTaskId?.let { taskId ->
-            navController.navigate(AppDestination.editTaskRoute(taskId)) {
+            navController.navigate(AppDestination.taskDetailRoute(taskId)) {
                 launchSingleTop = true
             }
             onOpenTaskConsumed()
@@ -111,6 +152,12 @@ fun InkTodoApp(
         }
     }
 
+    LaunchedEffect(openHolidayInfoToken) {
+        if (openHolidayInfoToken > 0) {
+            navController.navigate(AppDestination.HolidayDataInfo.route) { launchSingleTop = true }
+        }
+    }
+
     LaunchedEffect(userPreferences.fullFocus.enabled) {
         if (userPreferences.fullFocus.enabled &&
             currentRoute != AppDestination.Pomodoro.route
@@ -121,31 +168,54 @@ fun InkTodoApp(
         }
     }
 
+    LaunchedEffect(currentRoute) {
+        if (currentRoute != AppDestination.Pomodoro.route) {
+            pomodoroBottomBarVisible = true
+            pomodoroTransitionRunning = false
+        }
+    }
+
     InkBackdrop(scene = scene) {
-        Scaffold(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
+                .then(
+                    if (userPreferences.highRefreshRateAnimations && pomodoroTransitionRunning) {
+                        Modifier.preferredFrameRate(FrameRateCategory.High)
+                    } else {
+                        Modifier
+                    },
+                )
                 .semantics { testTagsAsResourceId = true },
-            containerColor = androidx.compose.ui.graphics.Color.Transparent,
-            bottomBar = {
-                if (showBottomBar) {
-                    InkBottomBar(
-                        currentRoute = currentRoute,
-                        onDestinationSelected = { destination ->
-                            navController.navigate(destination.route) {
-                                popUpTo(AppDestination.Todo.route) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                    )
-                }
-            },
-        ) { contentPadding ->
-            NavHost(
-                navController = navController,
-                startDestination = AppDestination.Todo.route,
-                modifier = Modifier.padding(contentPadding),
+        ) {
+            Scaffold(
+                modifier = Modifier
+                    .fillMaxSize(),
+                containerColor = androidx.compose.ui.graphics.Color.Transparent,
+            ) { contentPadding ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(contentPadding),
+                    contentAlignment = Alignment.TopCenter,
+                ) {
+                    NavHost(
+                        navController = navController,
+                        startDestination = AppDestination.Todo.route,
+                        modifier = Modifier
+                            .widthIn(max = contentMaxWidth)
+                            .fillMaxSize()
+                            .padding(
+                                bottom = if (reserveBottomBarContentSpace(
+                                        showBottomBar = showBottomBar,
+                                        isPomodoroRoute = currentRoute == AppDestination.Pomodoro.route,
+                                    )
+                                ) {
+                                    bottomBarContentPadding
+                                } else {
+                                    0.dp
+                                },
+                            ),
                 enterTransition = {
                     fadeIn(
                         animationSpec = tween(
@@ -202,7 +272,7 @@ fun InkTodoApp(
                         targetOffsetX = { width -> if (motion.enabled) width / 40 else 0 },
                     )
                 },
-            ) {
+                ) {
                 composable(AppDestination.Todo.route) {
                     val todoViewModel: TodoViewModel = viewModel(
                         factory = TodoViewModel.factory(
@@ -216,21 +286,62 @@ fun InkTodoApp(
                         viewModel = todoViewModel,
                         onAddTask = { navController.navigate(AppDestination.EditTask.route) },
                         onOpenTask = { taskId ->
-                            navController.navigate(AppDestination.editTaskRoute(taskId))
+                            navController.navigate(AppDestination.taskDetailRoute(taskId))
                         },
+                        onEditTask = { taskId -> navController.navigate(AppDestination.editTaskRoute(taskId)) },
                         onOpenSettings = { navController.navigate(AppDestination.Settings.route) },
                     )
                 }
                 composable(AppDestination.Calendar.route) {
                     val calendarViewModel: CalendarViewModel = viewModel(
-                        factory = CalendarViewModel.factory(taskRepository),
+                        factory = CalendarViewModel.factory(
+                            taskRepository,
+                            specialDateRepository,
+                            offlineCalendarService,
+                        ),
                     )
                     CalendarScreen(
                         viewModel = calendarViewModel,
                         onOpenTask = { taskId ->
-                            navController.navigate(AppDestination.editTaskRoute(taskId))
+                            navController.navigate(AppDestination.taskDetailRoute(taskId))
                         },
+                        onEditTask = { taskId -> navController.navigate(AppDestination.editTaskRoute(taskId)) },
+                        onManageSpecialDates = { navController.navigate(AppDestination.SpecialDates.route) },
+                        onOpenHolidayInfo = { navController.navigate(AppDestination.HolidayDataInfo.route) },
                     )
+                }
+                composable(AppDestination.SpecialDates.route) {
+                    val listViewModel: SpecialDateListViewModel = viewModel(
+                        factory = SpecialDateListViewModel.factory(specialDateRepository),
+                    )
+                    SpecialDateListScreen(
+                        viewModel = listViewModel,
+                        onBack = navController::navigateUp,
+                        onAdd = { navController.navigate(AppDestination.editSpecialDateRoute(0L)) },
+                        onEdit = { id -> navController.navigate(AppDestination.editSpecialDateRoute(id)) },
+                    )
+                }
+                composable(
+                    route = AppDestination.EDIT_SPECIAL_DATE_PATTERN,
+                    arguments = listOf(navArgument("specialDateId") { type = NavType.LongType }),
+                ) { entry ->
+                    val id = requireNotNull(entry.arguments).getLong("specialDateId")
+                    val editSpecialDateViewModel: SpecialDateEditViewModel = viewModel(
+                        key = "special_date_edit_$id",
+                        factory = SpecialDateEditViewModel.factory(
+                            id,
+                            specialDateRepository,
+                            specialDateTaskCoordinator,
+                        ),
+                    )
+                    SpecialDateEditScreen(
+                        viewModel = editSpecialDateViewModel,
+                        onBack = navController::navigateUp,
+                        onFinished = navController::navigateUp,
+                    )
+                }
+                composable(AppDestination.HolidayDataInfo.route) {
+                    HolidayDataInfoScreen(onBack = navController::navigateUp)
                 }
                 composable(AppDestination.Pomodoro.route) {
                     val pomodoroViewModel: PomodoroViewModel = viewModel(
@@ -240,7 +351,12 @@ fun InkTodoApp(
                             fullFocusController,
                         ),
                     )
-                    PomodoroScreen(pomodoroViewModel)
+                    PomodoroScreen(
+                        viewModel = pomodoroViewModel,
+                        onBottomBarVisibilityChanged = { pomodoroBottomBarVisible = it },
+                        onTransitionRunningChanged = { pomodoroTransitionRunning = it },
+                        normalBottomPadding = bottomBarContentPadding,
+                    )
                 }
                 composable(AppDestination.Completed.route) {
                     val completedViewModel: CompletedViewModel = viewModel(
@@ -254,8 +370,9 @@ fun InkTodoApp(
                     CompletedScreen(
                         viewModel = completedViewModel,
                         onOpenTask = { taskId ->
-                            navController.navigate(AppDestination.editTaskRoute(taskId))
+                            navController.navigate(AppDestination.taskDetailRoute(taskId))
                         },
+                        onEditTask = { taskId -> navController.navigate(AppDestination.editTaskRoute(taskId)) },
                         onSystemAlarmRequest = onSystemAlarmRequest,
                     )
                 }
@@ -293,6 +410,20 @@ fun InkTodoApp(
                     )
                 }
                 composable(
+                    route = AppDestination.TASK_DETAIL_PATTERN,
+                    arguments = listOf(navArgument("taskId") { type = NavType.LongType }),
+                ) { entry ->
+                    val taskId = requireNotNull(entry.arguments).getLong("taskId")
+                    val detailViewModel: TaskDetailViewModel = viewModel(
+                        key = "task_detail_$taskId",
+                        factory = TaskDetailViewModel.factory(taskId, taskRepository),
+                    )
+                    TaskDetailScreen(
+                        viewModel = detailViewModel,
+                        onBack = navController::navigateUp,
+                    )
+                }
+                composable(
                     route = AppDestination.EDIT_TASK_PATTERN,
                     arguments = listOf(navArgument("taskId") { type = NavType.LongType }),
                 ) { entry ->
@@ -315,6 +446,24 @@ fun InkTodoApp(
                         },
                     )
                 }
+                    }
+                }
+            }
+            if (showBottomBar) {
+                AnimatedBottomBarOverlay(
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                    visible = currentRoute != AppDestination.Pomodoro.route ||
+                        pomodoroBottomBarVisible,
+                    motionEnabled = motion.enabled,
+                    currentRoute = currentRoute,
+                    onDestinationSelected = { destination ->
+                        navController.navigate(destination.route) {
+                            popUpTo(AppDestination.Todo.route) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                )
             }
         }
     }
@@ -337,6 +486,54 @@ fun InkTodoApp(
             dismissButton = {
                 TextButton(onClick = { showReliabilityPrompt = false }) { Text("稍后") }
             },
+        )
+    }
+}
+
+@Composable
+private fun AnimatedBottomBarOverlay(
+    modifier: Modifier = Modifier,
+    visible: Boolean,
+    motionEnabled: Boolean,
+    currentRoute: String?,
+    onDestinationSelected: (AppDestination) -> Unit,
+) {
+    val easing = remember { CubicBezierEasing(0.25f, 1f, 0.5f, 1f) }
+    val slideProgress by animateFloatAsState(
+        targetValue = if (visible) 0f else 1f,
+        animationSpec = tween(
+            durationMillis = if (motionEnabled) 750 else 0,
+            easing = easing,
+        ),
+        label = "bottom bar slide",
+    )
+    val alpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = if (motionEnabled) 550 else 0,
+            easing = easing,
+        ),
+        label = "bottom bar fade",
+    )
+    var measuredHeight by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .onSizeChanged { measuredHeight = it.height }
+            .graphicsLayer {
+                this.alpha = alpha
+                translationY = bottomBarTranslationY(measuredHeight, slideProgress)
+            }
+            .then(if (alpha <= 0.01f) Modifier.clearAndSetSemantics { } else Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        InkBottomBar(
+            currentRoute = currentRoute,
+            onDestinationSelected = onDestinationSelected,
+            modifier = Modifier
+                .widthIn(max = 760.dp)
+                .fillMaxWidth(),
         )
     }
 }

@@ -13,7 +13,7 @@
         android:layout_height="match_parent"
         android:contentDescription="@null"
         android:scaleType="centerCrop"
-        android:src="@drawable/ink_mountain_master_v1" />
+        android:src="@drawable/widget_mountain_cool_v1" />
 
     <ImageView
         android:id="@+id/widget_mountain_veil"
@@ -44,7 +44,7 @@
                 android:layout_weight="1"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:shadowColor="#B8F4F1E8"
+                android:shadowColor="#B8E6EFF0"
                 android:shadowDx="0"
                 android:shadowDy="1"
                 android:shadowRadius="3"
@@ -73,7 +73,7 @@
             android:layout_height="0dp"
             android:layout_weight="1"
             android:gravity="center"
-            android:shadowColor="#B8F4F1E8"
+            android:shadowColor="#B8E6EFF0"
             android:shadowDx="0"
             android:shadowDy="1"
             android:shadowRadius="3"

@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -38,6 +39,15 @@ class DataStorePreferencesRepository(
     override suspend fun setLastUseSystemAlarm(value: Boolean) = edit(Keys.LAST_USE_SYSTEM_ALARM, value)
     override suspend fun setThemeMode(value: ThemeMode) = edit(Keys.THEME_MODE, value.name)
     override suspend fun setTaskSortOrder(value: TaskSortOrder) = edit(Keys.TASK_SORT_ORDER, value.name)
+    override suspend fun setHighRefreshRateAnimations(value: Boolean) =
+        edit(Keys.HIGH_REFRESH_RATE_ANIMATIONS, value)
+
+    override suspend fun setPomodoroFloatingPosition(xFraction: Float, yFraction: Float) {
+        dataStore.edit { values ->
+            values[Keys.POMODORO_FLOATING_X_FRACTION] = xFraction.coerceIn(0f, 1f)
+            values[Keys.POMODORO_FLOATING_Y_FRACTION] = yFraction.coerceIn(0f, 1f)
+        }
+    }
 
     override suspend fun setWidgetMaxTasks(value: Int) {
         require(value in UserPreferences.MIN_WIDGET_TASKS..UserPreferences.MAX_WIDGET_TASKS)
@@ -52,6 +62,8 @@ class DataStorePreferencesRepository(
             values[Keys.POMODORO_RUN_STATE] = value.runState.name
             values[Keys.POMODORO_TARGET_END] = value.targetEndEpochMillis
             values[Keys.POMODORO_PAUSED_REMAINING] = value.pausedRemainingMillis
+            values[Keys.POMODORO_ORDINARY_IMMERSIVE] = value.ordinaryImmersive
+            values[Keys.POMODORO_FLOATING_VISIBLE] = value.floatingVisible
         }
     }
 
@@ -83,11 +95,18 @@ class DataStorePreferencesRepository(
         taskSortOrder = values[Keys.TASK_SORT_ORDER].toEnumOrDefault(TaskSortOrder.TIME_ASCENDING),
         widgetMaxTasks = (values[Keys.WIDGET_MAX_TASKS] ?: UserPreferences.DEFAULT_WIDGET_MAX_TASKS)
             .coerceIn(UserPreferences.MIN_WIDGET_TASKS, UserPreferences.MAX_WIDGET_TASKS),
+        highRefreshRateAnimations = values[Keys.HIGH_REFRESH_RATE_ANIMATIONS] ?: false,
+        pomodoroFloatingXFraction = (values[Keys.POMODORO_FLOATING_X_FRACTION]
+            ?: UserPreferences.DEFAULT_FLOATING_X_FRACTION).coerceIn(0f, 1f),
+        pomodoroFloatingYFraction = (values[Keys.POMODORO_FLOATING_Y_FRACTION]
+            ?: UserPreferences.DEFAULT_FLOATING_Y_FRACTION).coerceIn(0f, 1f),
         pomodoroSession = PomodoroSessionPreferences(
             phase = values[Keys.POMODORO_PHASE].toEnumOrDefault(PomodoroPhase.FOCUS),
             runState = values[Keys.POMODORO_RUN_STATE].toEnumOrDefault(PomodoroRunState.IDLE),
             targetEndEpochMillis = (values[Keys.POMODORO_TARGET_END] ?: 0L).coerceAtLeast(0L),
             pausedRemainingMillis = (values[Keys.POMODORO_PAUSED_REMAINING] ?: 0L).coerceAtLeast(0L),
+            ordinaryImmersive = values[Keys.POMODORO_ORDINARY_IMMERSIVE] ?: false,
+            floatingVisible = values[Keys.POMODORO_FLOATING_VISIBLE] ?: false,
         ),
         fullFocus = FullFocusPreferences(
             enabled = values[Keys.FULL_FOCUS_ENABLED] ?: false,
@@ -112,10 +131,15 @@ class DataStorePreferencesRepository(
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val TASK_SORT_ORDER = stringPreferencesKey("task_sort_order")
         val WIDGET_MAX_TASKS = intPreferencesKey("widget_max_tasks")
+        val HIGH_REFRESH_RATE_ANIMATIONS = booleanPreferencesKey("high_refresh_rate_animations")
+        val POMODORO_FLOATING_X_FRACTION = floatPreferencesKey("pomodoro_floating_x_fraction")
+        val POMODORO_FLOATING_Y_FRACTION = floatPreferencesKey("pomodoro_floating_y_fraction")
         val POMODORO_PHASE = stringPreferencesKey("pomodoro_phase")
         val POMODORO_RUN_STATE = stringPreferencesKey("pomodoro_run_state")
         val POMODORO_TARGET_END = longPreferencesKey("pomodoro_target_end_epoch_millis")
         val POMODORO_PAUSED_REMAINING = longPreferencesKey("pomodoro_paused_remaining_millis")
+        val POMODORO_ORDINARY_IMMERSIVE = booleanPreferencesKey("pomodoro_ordinary_immersive")
+        val POMODORO_FLOATING_VISIBLE = booleanPreferencesKey("pomodoro_floating_visible")
         val FULL_FOCUS_ENABLED = booleanPreferencesKey("full_focus_enabled")
         val FULL_FOCUS_PIN_SALT = stringPreferencesKey("full_focus_pin_salt")
         val FULL_FOCUS_PIN_VERIFIER = stringPreferencesKey("full_focus_pin_verifier")

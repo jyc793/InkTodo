@@ -146,7 +146,6 @@ class InkTodoWidgetProvider : AppWidgetProvider() {
         const val DEFAULT_WIDTH_DP = 110
         const val DEFAULT_HEIGHT_DP = 110
         val DATE_BOUNDARY_ACTIONS = setOf(
-            Intent.ACTION_DATE_CHANGED,
             Intent.ACTION_TIME_CHANGED,
             Intent.ACTION_TIMEZONE_CHANGED,
         )
@@ -198,10 +197,10 @@ internal data class WidgetThemePalette(
             rowsBackground = R.drawable.widget_rows_background_light,
             completeBackground = R.drawable.widget_complete_background_light,
             sealBackground = R.drawable.widget_seal_background_light,
-            ink = 0xFF202725.toInt(),
-            mist = 0xFF66706D.toInt(),
-            indigo = 0xFF355C65.toInt(),
-            jade = 0xFF3F786A.toInt(),
+            ink = 0xFF14262F.toInt(),
+            mist = 0xFF526A76.toInt(),
+            indigo = 0xFF315F73.toInt(),
+            jade = 0xFF3E7883.toInt(),
             cinnabar = 0xFFA33C32.toInt(),
         )
 
@@ -211,10 +210,10 @@ internal data class WidgetThemePalette(
             rowsBackground = R.drawable.widget_rows_background_dark,
             completeBackground = R.drawable.widget_complete_background_dark,
             sealBackground = R.drawable.widget_seal_background_dark,
-            ink = 0xFFF2F5F1.toInt(),
-            mist = 0xFFC2CDC8.toInt(),
-            indigo = 0xFFB7D4D7.toInt(),
-            jade = 0xFFA2D5C3.toInt(),
+            ink = 0xFFF0F6F7.toInt(),
+            mist = 0xFFB7C8CE.toInt(),
+            indigo = 0xFF9CC3D0.toInt(),
+            jade = 0xFF87BAC3.toInt(),
             cinnabar = 0xFFF08B7E.toInt(),
         )
     }

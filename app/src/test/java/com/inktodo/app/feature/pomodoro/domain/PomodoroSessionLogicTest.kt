@@ -43,6 +43,25 @@ class PomodoroSessionLogicTest {
     }
 
     @Test
+    fun staleClockTickNeverDisplaysMoreThanConfiguredDuration() {
+        val preferences = UserPreferences(focusMinutes = 45)
+        val session = PomodoroSessionLogic.start(
+            preferences.pomodoroSession,
+            preferences,
+            nowEpochMillis = 10_000L,
+        )
+
+        assertEquals(
+            45L * 60_000L,
+            PomodoroSessionLogic.remainingMillis(session, preferences, nowEpochMillis = 9_500L),
+        )
+        assertEquals(
+            45L * 60_000L - 1_000L,
+            PomodoroSessionLogic.remainingMillis(session, preferences, nowEpochMillis = 11_000L),
+        )
+    }
+
+    @Test
     fun backgroundTimeJumpUsesTargetInsteadOfTickCount() {
         val preferences = UserPreferences(focusMinutes = 25)
         val session = PomodoroSessionLogic.start(preferences.pomodoroSession, preferences, 10_000L)
@@ -66,6 +85,75 @@ class PomodoroSessionLogicTest {
 
         assertEquals(20L * 60_000L, paused.pausedRemainingMillis)
         assertEquals(119L * 60_000L, resumed.targetEndEpochMillis)
+    }
+
+    @Test
+    fun ordinaryImmersiveStatePersistsThroughPauseAndResumeButClearsOnReset() {
+        val preferences = UserPreferences(focusMinutes = 25)
+        val running = PomodoroSessionLogic.start(preferences.pomodoroSession, preferences, 0L)
+            .copy(ordinaryImmersive = true)
+        val paused = PomodoroSessionLogic.pause(running, 60_000L)
+        val resumed = PomodoroSessionLogic.resume(paused, 120_000L)
+
+        assertTrue(paused.ordinaryImmersive)
+        assertTrue(resumed.ordinaryImmersive)
+        assertFalse(PomodoroSessionLogic.reset(resumed).ordinaryImmersive)
+        assertFalse(PomodoroSessionLogic.finish(resumed).ordinaryImmersive)
+    }
+
+    @Test
+    fun floatingTimerPersistsThroughPauseAndResumeButClearsOnResetAndFinish() {
+        val preferences = UserPreferences(focusMinutes = 25)
+        val running = PomodoroSessionLogic.start(preferences.pomodoroSession, preferences, 0L)
+            .copy(floatingVisible = true)
+        val paused = PomodoroSessionLogic.pause(running, 60_000L)
+        val resumed = PomodoroSessionLogic.resume(paused, 120_000L)
+
+        assertTrue(paused.floatingVisible)
+        assertTrue(resumed.floatingVisible)
+        assertFalse(PomodoroSessionLogic.reset(resumed).floatingVisible)
+        assertFalse(PomodoroSessionLogic.finish(resumed).floatingVisible)
+    }
+
+    @Test
+    fun coordinatorDistinguishesOrdinaryStartFromFullFocusStart() = runBlocking {
+        val ordinaryRepository = FakePreferencesRepository(UserPreferences())
+        val fullFocusRepository = FakePreferencesRepository(UserPreferences())
+
+        PomodoroCoordinator(ordinaryRepository, FakeScheduler(), FakeNotifications()).start()
+        PomodoroCoordinator(fullFocusRepository, FakeScheduler(), FakeNotifications())
+            .start(ordinaryImmersive = false)
+
+        assertTrue(ordinaryRepository.value.pomodoroSession.ordinaryImmersive)
+        assertFalse(fullFocusRepository.value.pomodoroSession.ordinaryImmersive)
+    }
+
+    @Test
+    fun presentationOnlyChangesDoNotRescheduleOrCancelTheAlarm() = runBlocking {
+        val repository = FakePreferencesRepository(UserPreferences())
+        val scheduler = FakeScheduler()
+        val coordinator = PomodoroCoordinator(repository, scheduler, FakeNotifications())
+        coordinator.start()
+        val scheduledAfterStart = scheduler.scheduled.toList()
+        val cancelsAfterStart = scheduler.cancelCount
+
+        coordinator.setOrdinaryImmersive(false)
+        coordinator.setOrdinaryImmersive(true)
+        coordinator.setFloatingVisible(true)
+        coordinator.setFloatingVisible(false)
+
+        assertEquals(scheduledAfterStart, scheduler.scheduled)
+        assertEquals(cancelsAfterStart, scheduler.cancelCount)
+    }
+
+    @Test
+    fun floatingTimerCannotBeEnabledWithoutAnActiveSession() = runBlocking {
+        val repository = FakePreferencesRepository(UserPreferences())
+        val coordinator = PomodoroCoordinator(repository, FakeScheduler(), FakeNotifications())
+
+        coordinator.setFloatingVisible(true)
+
+        assertFalse(repository.value.pomodoroSession.floatingVisible)
     }
 
     @Test
@@ -151,8 +239,9 @@ class PomodoroSessionLogicTest {
 
     private class FakeScheduler : PomodoroAlarmScheduler {
         val scheduled = mutableListOf<Long>()
+        var cancelCount = 0
         override fun schedule(targetEndEpochMillis: Long) { scheduled += targetEndEpochMillis }
-        override fun cancel() = Unit
+        override fun cancel() { cancelCount += 1 }
     }
 
     private class FakeNotifications : PomodoroNotificationController {

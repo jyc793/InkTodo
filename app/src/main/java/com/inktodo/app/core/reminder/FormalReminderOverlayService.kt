@@ -6,17 +6,16 @@ import android.animation.ValueAnimator
 
 import android.app.KeyguardManager
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.res.Configuration
 import android.content.pm.ServiceInfo
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
-import android.media.AudioAttributes
-import android.media.Ringtone
-import android.media.RingtoneManager
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -55,27 +54,45 @@ class FormalReminderOverlayService : Service() {
     private lateinit var windowManager: WindowManager
     private var overlayView: View? = null
     private val fogAnimators = mutableListOf<Animator>()
-    private var ringtone: Ringtone? = null
     private var activeTaskId: Long = -1L
-    private var stopAfterTone = false
+    private var activeKind: ReminderSnapshotKind = ReminderSnapshotKind.AT_TIME
+    private var activeSnapshot: ScheduledTaskSnapshot? = null
+    private var confirmationCountdown: Runnable? = null
+    private val unlockReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == Intent.ACTION_USER_PRESENT) {
+                activeSnapshot?.let(::showOverlayWhenUnlocked)
+            }
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
         windowManager = getSystemService(WindowManager::class.java)
+        val filter = IntentFilter(Intent.ACTION_USER_PRESENT)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(unlockReceiver, filter, RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(unlockReceiver, filter)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_DISMISS) {
-            val taskId = intent.getLongExtra(EXTRA_TASK_ID, -1L)
-            if (activeTaskId <= 0 || taskId <= 0 || taskId == activeTaskId) stopCompletely()
-            return START_NOT_STICKY
-        }
         val snapshot = intent?.toSnapshot() ?: run {
             stopCompletely()
             return START_NOT_STICKY
         }
-        activeTaskId = snapshot.taskId
+        val previousTaskId = activeTaskId
         val container = (application as InkTodoApplication).appContainer
+        if (previousTaskId > 0L && previousTaskId != snapshot.taskId) {
+            container.notificationController.cancelFormal(previousTaskId)
+        }
+        removeOverlay()
+        activeTaskId = snapshot.taskId
+        displayedTaskId = snapshot.taskId
+        activeKind = snapshot.kind
+        activeSnapshot = snapshot
         container.notificationController.createChannels()
         val notification = container.notificationController.buildFormalNotification(snapshot)
         val notificationId = container.notificationController.formalNotificationId(snapshot.taskId)
@@ -84,33 +101,17 @@ class FormalReminderOverlayService : Service() {
         } else {
             startForeground(notificationId, notification)
         }
-        playSystemNotificationTone()
-
-        val keyguard = getSystemService(KeyguardManager::class.java)
-        if (Settings.canDrawOverlays(this) && !keyguard.isKeyguardLocked) {
-            stopAfterTone = false
-            serviceScope.launch {
-                val themeMode = runCatching {
-                    container.preferencesRepository.preferences.first().themeMode
-                }.getOrDefault(ThemeMode.SYSTEM)
-                val systemDark = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
-                    Configuration.UI_MODE_NIGHT_YES
-                val darkTheme = themeMode.resolveDarkTheme(systemDark)
-                withContext(Dispatchers.Main) {
-                    if (activeTaskId == snapshot.taskId) showOverlay(snapshot, darkTheme)
-                }
-            }
-        } else {
-            stopAfterTone = true
-        }
-        return START_NOT_STICKY
+        showOverlayWhenUnlocked(snapshot)
+        return START_REDELIVER_INTENT
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        if (displayedTaskId == activeTaskId) displayedTaskId = -1L
         removeOverlay()
-        stopTone()
+        mainHandler.removeCallbacksAndMessages(null)
+        runCatching { unregisterReceiver(unlockReceiver) }
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -139,7 +140,7 @@ class FormalReminderOverlayService : Service() {
         }
         panel.addView(
             ImageView(this).apply {
-                setImageResource(R.drawable.ink_mountain_master_v1)
+                setImageResource(R.drawable.widget_mountain_cool_v1)
                 scaleType = ImageView.ScaleType.CENTER_CROP
                 contentDescription = null
             },
@@ -196,7 +197,7 @@ class FormalReminderOverlayService : Service() {
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(22.dp(), 20.dp(), 22.dp(), 20.dp())
+            setPadding(18.dp(), 14.dp(), 18.dp(), 14.dp())
             background = roundedDrawable(
                 radiusPx = 24f * density,
                 color = palette.card,
@@ -204,16 +205,16 @@ class FormalReminderOverlayService : Service() {
                 strokeColor = palette.cardEdge,
             )
         }
-        content.addView(textView(snapshot.title, 28f, palette.ink, Typeface.BOLD).apply {
+        content.addView(textView(snapshot.title, 22f, palette.ink, Typeface.BOLD).apply {
             gravity = Gravity.CENTER
-            setPadding(0, 0, 0, if (snapshot.note == null) 20.dp() else 0)
+            setPadding(0, 0, 0, if (snapshot.note == null) 14.dp() else 0)
         })
         snapshot.note?.let { note ->
             content.addView(textView(note, 16f, palette.inkSoft, Typeface.NORMAL).apply {
                 gravity = Gravity.CENTER
                 maxLines = 4
                 ellipsize = TextUtils.TruncateAt.END
-                setPadding(0, 10.dp(), 0, 20.dp())
+                setPadding(0, 8.dp(), 0, 14.dp())
             })
         }
         content.addView(
@@ -222,14 +223,14 @@ class FormalReminderOverlayService : Service() {
                 textSize = 19f
                 setTextColor(Color.WHITE)
                 isAllCaps = false
-                minHeight = 56.dp()
+                minHeight = 52.dp()
                 background = roundedDrawable(
                     radiusPx = 18f * density,
                     color = palette.button,
                 )
-                setOnClickListener { acknowledge(snapshot.taskId) }
+                setOnClickListener { startConfirmationCountdown(snapshot.taskId, this) }
             },
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 56.dp()),
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 52.dp()),
         )
         panel.addView(
             content,
@@ -238,9 +239,9 @@ class FormalReminderOverlayService : Service() {
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.BOTTOM,
             ).apply {
-                leftMargin = 18.dp()
-                rightMargin = 18.dp()
-                bottomMargin = 18.dp()
+                leftMargin = 14.dp()
+                rightMargin = 14.dp()
+                bottomMargin = 14.dp()
             },
         )
         panel.addView(
@@ -258,16 +259,30 @@ class FormalReminderOverlayService : Service() {
             ),
         )
 
+        val isTablet = resources.configuration.smallestScreenWidthDp >= 600
+        val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val panelWidth = if (isTablet) {
+            (if (isLandscape) 720 else 640).dp()
+        } else {
+            FrameLayout.LayoutParams.MATCH_PARENT
+        }
+        val panelHeight = when {
+            isTablet && isLandscape -> 380.dp()
+            isTablet -> 430.dp()
+            else -> 390.dp()
+        }
         root.addView(
             panel,
             FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                430.dp(),
-                Gravity.BOTTOM,
+                panelWidth,
+                panelHeight,
+                if (isTablet) Gravity.CENTER else Gravity.BOTTOM,
             ).apply {
-                leftMargin = 22.dp()
-                rightMargin = 22.dp()
-                bottomMargin = 42.dp()
+                if (!isTablet) {
+                    leftMargin = 14.dp()
+                    rightMargin = 14.dp()
+                    bottomMargin = 24.dp()
+                }
             },
         )
         val params = WindowManager.LayoutParams(
@@ -286,7 +301,26 @@ class FormalReminderOverlayService : Service() {
             overlayView = root
             startFogMotion(upperFog, lowerFog, density)
         }.onFailure {
-            stopAfterTone = true
+            removeOverlay()
+        }
+    }
+
+    private fun showOverlayWhenUnlocked(snapshot: ScheduledTaskSnapshot) {
+        val keyguard = getSystemService(KeyguardManager::class.java)
+        if (!Settings.canDrawOverlays(this) || keyguard.isKeyguardLocked) return
+        val container = (application as InkTodoApplication).appContainer
+        serviceScope.launch {
+            val themeMode = runCatching {
+                container.preferencesRepository.preferences.first().themeMode
+            }.getOrDefault(ThemeMode.SYSTEM)
+            val systemDark = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
+                Configuration.UI_MODE_NIGHT_YES
+            val darkTheme = themeMode.resolveDarkTheme(systemDark)
+            withContext(Dispatchers.Main) {
+                if (activeTaskId == snapshot.taskId && overlayView == null) {
+                    showOverlay(snapshot, darkTheme)
+                }
+            }
         }
     }
 
@@ -333,7 +367,7 @@ class FormalReminderOverlayService : Service() {
     private fun acknowledge(taskId: Long) {
         val container = (application as InkTodoApplication).appContainer
         removeOverlay()
-        stopTone()
+        mainHandler.removeCallbacksAndMessages(null)
         serviceScope.launch {
             runCatching {
                 container.reminderHealthStore.record(
@@ -342,55 +376,55 @@ class FormalReminderOverlayService : Service() {
                     detail = "用户已确认正式提醒",
                 )
             }
-            runCatching { container.reminderSnapshotStore.remove(taskId) }
+            if (activeKind != ReminderSnapshotKind.TIME_RANGE) {
+                runCatching { container.reminderSnapshotStore.remove(taskId) }
+            }
             container.notificationController.cancelFormal(taskId)
             withContext(Dispatchers.Main) { stopCompletely() }
         }
     }
 
-    private fun playSystemNotificationTone() {
-        stopTone()
-        val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION) ?: return
-        ringtone = RingtoneManager.getRingtone(this, uri)?.apply {
-            audioAttributes = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .build()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) isLooping = false
-            play()
+    private fun startConfirmationCountdown(taskId: Long, button: Button) {
+        if (confirmationCountdown != null || taskId != activeTaskId) return
+        button.isEnabled = false
+        var remainingSeconds = FormalReminderActivity.CONFIRM_COUNTDOWN_SECONDS
+        button.text = formalConfirmationButtonText(remainingSeconds, confirming = false)
+        val countdown = object : Runnable {
+            override fun run() {
+                if (taskId != activeTaskId) {
+                    cancelConfirmationCountdown()
+                    return
+                }
+                remainingSeconds -= 1
+                if (remainingSeconds <= 0) {
+                    confirmationCountdown = null
+                    acknowledge(taskId)
+                } else {
+                    button.text = formalConfirmationButtonText(remainingSeconds, confirming = false)
+                    mainHandler.postDelayed(this, 1_000L)
+                }
+            }
         }
-        mainHandler.postDelayed({
-            stopTone()
-            if (stopAfterTone) detachAndStop()
-        }, MAX_TONE_DURATION_MS)
+        confirmationCountdown = countdown
+        mainHandler.postDelayed(countdown, 1_000L)
     }
 
-    private fun stopTone() {
-        runCatching { ringtone?.stop() }
-        ringtone = null
-        mainHandler.removeCallbacksAndMessages(null)
+    private fun cancelConfirmationCountdown() {
+        confirmationCountdown?.let(mainHandler::removeCallbacks)
+        confirmationCountdown = null
     }
 
     private fun removeOverlay() {
+        cancelConfirmationCountdown()
         fogAnimators.forEach(Animator::cancel)
         fogAnimators.clear()
         overlayView?.let { view -> runCatching { windowManager.removeViewImmediate(view) } }
         overlayView = null
     }
 
-    private fun detachAndStop() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            stopForeground(STOP_FOREGROUND_DETACH)
-        } else {
-            @Suppress("DEPRECATION")
-            stopForeground(false)
-        }
-        stopSelf()
-    }
-
     private fun stopCompletely() {
         removeOverlay()
-        stopTone()
+        mainHandler.removeCallbacksAndMessages(null)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } else {
@@ -405,11 +439,14 @@ class FormalReminderOverlayService : Service() {
         val title = getStringExtra(EXTRA_TASK_TITLE)?.trim().orEmpty()
         val note = getStringExtra(EXTRA_TASK_NOTE)?.trim()?.takeIf(String::isNotEmpty)
         val startAt = getLongExtra(EXTRA_START_AT, -1L)
+        val kind = getStringExtra(EXTRA_KIND)?.let {
+            runCatching { ReminderSnapshotKind.valueOf(it) }.getOrNull()
+        } ?: ReminderSnapshotKind.AT_TIME
         return if (taskId > 0 && title.isNotEmpty() && startAt > 0) {
             ScheduledTaskSnapshot(
                 taskId = taskId,
                 title = title,
-                kind = ReminderSnapshotKind.AT_TIME,
+                kind = kind,
                 startAt = Instant.ofEpochMilli(startAt),
                 note = note,
             )
@@ -420,12 +457,12 @@ class FormalReminderOverlayService : Service() {
 
     companion object {
         private const val ACTION_SHOW = "com.inktodo.app.action.SHOW_FORMAL_OVERLAY"
-        private const val ACTION_DISMISS = "com.inktodo.app.action.DISMISS_FORMAL_OVERLAY"
         private const val EXTRA_TASK_ID = "taskId"
         private const val EXTRA_TASK_TITLE = "taskTitle"
         private const val EXTRA_TASK_NOTE = "taskNote"
         private const val EXTRA_START_AT = "startAt"
-        private const val MAX_TONE_DURATION_MS = 8_000L
+        private const val EXTRA_KIND = "reminderKind"
+        @Volatile private var displayedTaskId: Long = -1L
 
         fun show(context: Context, snapshot: ScheduledTaskSnapshot): Boolean = runCatching {
             val intent = Intent(context, FormalReminderOverlayService::class.java)
@@ -434,6 +471,7 @@ class FormalReminderOverlayService : Service() {
                 .putExtra(EXTRA_TASK_TITLE, snapshot.title)
                 .putExtra(EXTRA_TASK_NOTE, snapshot.note)
                 .putExtra(EXTRA_START_AT, snapshot.startAt.toEpochMilli())
+                .putExtra(EXTRA_KIND, snapshot.kind.name)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
             } else {
@@ -442,11 +480,9 @@ class FormalReminderOverlayService : Service() {
         }.isSuccess
 
         fun dismiss(context: Context, taskId: Long) {
-            context.startService(
-                Intent(context, FormalReminderOverlayService::class.java)
-                    .setAction(ACTION_DISMISS)
-                    .putExtra(EXTRA_TASK_ID, taskId),
-            )
+            if (displayedTaskId == taskId) {
+                context.stopService(Intent(context, FormalReminderOverlayService::class.java))
+            }
         }
     }
 }
@@ -467,38 +503,38 @@ internal data class FormalOverlayPalette(
 
 internal fun formalOverlayPalette(darkTheme: Boolean): FormalOverlayPalette = if (darkTheme) {
     FormalOverlayPalette(
-        scrim = Color.argb(184, 3, 10, 8),
-        edge = Color.rgb(91, 133, 119),
+        scrim = Color.argb(190, 4, 14, 20),
+        edge = Color.rgb(100, 145, 160),
         veil = intArrayOf(
-            Color.argb(70, 9, 19, 16),
-            Color.argb(136, 16, 30, 26),
-            Color.argb(218, 12, 23, 20),
+            Color.argb(62, 12, 30, 39),
+            Color.argb(132, 14, 38, 49),
+            Color.argb(218, 9, 26, 35),
         ),
         cinnabar = Color.rgb(235, 130, 116),
-        titleShadow = Color.argb(190, 8, 17, 14),
-        card = Color.argb(218, 18, 31, 27),
-        cardEdge = Color.argb(170, 112, 163, 145),
-        ink = Color.rgb(242, 246, 241),
-        inkSoft = Color.rgb(199, 213, 206),
-        button = Color.rgb(67, 112, 95),
-        highlightEdge = Color.argb(205, 124, 178, 159),
+        titleShadow = Color.argb(190, 5, 20, 28),
+        card = Color.argb(224, 15, 38, 48),
+        cardEdge = Color.argb(175, 111, 165, 181),
+        ink = Color.rgb(240, 247, 249),
+        inkSoft = Color.rgb(193, 212, 219),
+        button = Color.rgb(54, 105, 119),
+        highlightEdge = Color.argb(205, 126, 182, 198),
     )
 } else {
     FormalOverlayPalette(
-        scrim = Color.argb(126, 7, 16, 13),
-        edge = Color.rgb(111, 151, 138),
+        scrim = Color.argb(126, 8, 25, 33),
+        edge = Color.rgb(94, 138, 153),
         veil = intArrayOf(
-            Color.argb(34, 244, 241, 232),
-            Color.argb(76, 232, 239, 234),
-            Color.argb(190, 238, 241, 234),
+            Color.argb(26, 237, 246, 248),
+            Color.argb(64, 213, 231, 237),
+            Color.argb(184, 224, 238, 242),
         ),
         cinnabar = Color.rgb(163, 60, 50),
-        titleShadow = Color.argb(170, 244, 241, 232),
-        card = Color.argb(188, 241, 244, 237),
-        cardEdge = Color.argb(105, 111, 151, 138),
-        ink = Color.rgb(23, 32, 29),
-        inkSoft = Color.rgb(45, 58, 53),
-        button = Color.rgb(52, 88, 75),
-        highlightEdge = Color.argb(190, 150, 190, 177),
+        titleShadow = Color.argb(170, 232, 244, 247),
+        card = Color.argb(205, 228, 240, 244),
+        cardEdge = Color.argb(125, 91, 139, 155),
+        ink = Color.rgb(20, 38, 47),
+        inkSoft = Color.rgb(54, 78, 88),
+        button = Color.rgb(49, 95, 111),
+        highlightEdge = Color.argb(195, 137, 179, 192),
     )
 }

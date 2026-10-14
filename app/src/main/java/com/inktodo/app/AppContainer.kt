@@ -21,6 +21,11 @@ import com.inktodo.app.feature.todo.domain.TaskRepository
 import com.inktodo.app.feature.todo.domain.DefaultTaskCommandService
 import com.inktodo.app.feature.todo.domain.TaskCommandService
 import com.inktodo.app.feature.todo.domain.TaskCommandIssueNoticeGate
+import com.inktodo.app.feature.calendar.data.RoomSpecialDateRepository
+import com.inktodo.app.feature.calendar.data.OfficialHolidayDataUpdateNotifier
+import com.inktodo.app.feature.calendar.domain.OfflineCalendarService
+import com.inktodo.app.feature.calendar.domain.SpecialDateRepository
+import com.inktodo.app.feature.calendar.domain.SpecialDateTaskCoordinator
 import com.inktodo.app.feature.settings.data.AndroidReminderReliabilityChecker
 import com.inktodo.app.feature.settings.data.ReminderReliabilityChecker
 import com.inktodo.app.feature.settings.data.ReminderSettingsNavigator
@@ -54,10 +59,14 @@ interface AppContainer {
     val pomodoroCoordinator: PomodoroCoordinator
     val fullFocusController: FullFocusController
     val widgetUpdater: WidgetUpdater
+    val specialDateRepository: SpecialDateRepository
+    val offlineCalendarService: OfflineCalendarService
+    val specialDateTaskCoordinator: SpecialDateTaskCoordinator
 }
 
 class DefaultAppContainer(context: Context) : AppContainer {
     private val applicationContext = context.applicationContext
+    private val holidayDataUpdateNotifier by lazy { OfficialHolidayDataUpdateNotifier(applicationContext) }
 
     private val database: InkTodoDatabase by lazy {
         Room.databaseBuilder(
@@ -71,6 +80,14 @@ class DefaultAppContainer(context: Context) : AppContainer {
 
     override val taskRepository: TaskRepository by lazy {
         RoomTaskRepository(database.taskDao())
+    }
+
+    override val specialDateRepository: SpecialDateRepository by lazy {
+        RoomSpecialDateRepository(database.specialDateDao())
+    }
+
+    override val offlineCalendarService: OfflineCalendarService by lazy {
+        OfflineCalendarService()
     }
 
     override val preferencesRepository: PreferencesRepository by lazy {
@@ -99,6 +116,14 @@ class DefaultAppContainer(context: Context) : AppContainer {
             snapshotStore = reminderSnapshotStore,
             scheduler = reminderScheduler,
             healthStore = reminderHealthStore,
+            advanceRecurrence = { taskId, after ->
+                taskCommandService.advanceRecurrence(taskId, after)
+            },
+            pruneExpiredRecurrence = { now -> taskCommandService.pruneExpiredRecurringTasks(now) },
+            reconcileSpecialDates = { now ->
+                specialDateTaskCoordinator.reconcile(now)
+                holidayDataUpdateNotifier.reconcile(now)
+            },
         )
     }
 
@@ -151,6 +176,15 @@ class DefaultAppContainer(context: Context) : AppContainer {
 
     override val widgetUpdater: WidgetUpdater by lazy {
         AndroidWidgetUpdater(applicationContext)
+    }
+
+    override val specialDateTaskCoordinator: SpecialDateTaskCoordinator by lazy {
+        SpecialDateTaskCoordinator(
+            specialDateRepository,
+            taskRepository,
+            taskCommandService,
+            offlineCalendarService,
+        )
     }
 
     private companion object {

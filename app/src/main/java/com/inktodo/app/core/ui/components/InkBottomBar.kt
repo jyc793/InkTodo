@@ -48,9 +48,11 @@ import kotlin.math.sin
 fun InkBottomBar(
     currentRoute: String?,
     onDestinationSelected: (AppDestination) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val colors = InkTheme.colors
     Surface(
+        modifier = modifier,
         color = colors.wash.copy(alpha = InkTheme.glass.navigationAlpha),
         border = BorderStroke(InkTheme.glass.edgeWidth, colors.glassEdge),
         shadowElevation = InkTheme.glass.shadowElevation,

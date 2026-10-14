@@ -5,6 +5,9 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.inktodo.app.feature.calendar.domain.CalendarMonthBuilder
 import com.inktodo.app.feature.calendar.domain.CalendarMonthProjection
+import com.inktodo.app.feature.calendar.domain.OfflineCalendarService
+import com.inktodo.app.feature.calendar.domain.OfficialHolidayScheduleData
+import com.inktodo.app.feature.calendar.domain.SpecialDateRepository
 import com.inktodo.app.feature.todo.domain.TaskRepository
 import com.inktodo.app.feature.todo.ui.simpleViewModelFactory
 import java.time.Clock
@@ -23,6 +26,8 @@ import kotlinx.coroutines.launch
 
 class CalendarViewModel(
     repository: TaskRepository,
+    specialDateRepository: SpecialDateRepository,
+    private val calendarService: OfflineCalendarService,
     private val clock: Clock = Clock.systemDefaultZone(),
     private val zoneId: ZoneId = ZoneId.systemDefault(),
 ) : ViewModel() {
@@ -45,16 +50,23 @@ class CalendarViewModel(
 
     val uiState: StateFlow<CalendarMonthProjection> = combine(
         repository.observePending(),
+        specialDateRepository.observeAll(),
         visibleMonth,
         selectedDate,
         today,
-    ) { tasks, month, selected, currentToday ->
-        CalendarMonthBuilder.project(
+    ) { tasks, specialDates, month, selected, currentToday ->
+        val base = CalendarMonthBuilder.project(
             tasks = tasks,
             month = month,
             selectedDate = selected,
             today = currentToday,
             zoneId = zoneId,
+        )
+        val decorations = calendarService.decorations(month, specialDates)
+        base.copy(
+            dayDecorations = decorations,
+            selectedDecoration = calendarService.decorate(selected, specialDates),
+            holidayDataUpdateNeeded = OfficialHolidayScheduleData.shouldShowUpdateNotice(currentToday),
         )
     }.stateIn(
         viewModelScope,
@@ -83,7 +95,11 @@ class CalendarViewModel(
     }
 
     companion object {
-        fun factory(repository: TaskRepository): ViewModelProvider.Factory =
-            simpleViewModelFactory { CalendarViewModel(repository) }
+        fun factory(
+            repository: TaskRepository,
+            specialDateRepository: SpecialDateRepository,
+            calendarService: OfflineCalendarService,
+        ): ViewModelProvider.Factory =
+            simpleViewModelFactory { CalendarViewModel(repository, specialDateRepository, calendarService) }
     }
 }
